@@ -1,0 +1,220 @@
+---
+title: "Slim_simulations_TSR_lasting"
+output: html_document
+---
+
+## Load SliM outputs into R
+```{r}
+library(readr)
+Simulations_all <- read_table2("˜/All_runs_42000_0.5.txt", col_names=FALSE)
+
+colnames(Simulations_all) [2] <- "Generation"
+colnames(Simulations_all) [8] <- "Sel_Coeff"
+
+# Generate relevant analysis parameters
+Simulations_all$Allele_freq <- Simulations_all$X12/84000
+
+Simulations_all$Run <- sapply(strsplit(as.character(Simulations_all$X1), "[.]"), "[", 3)
+
+Simulations_all$Mut_freq <- as.numeric(paste(0, sapply(strsplit(as.character(Simulations_all$X1), "[.]"), "[", 5 ), sep='.'))  
+
+Simulations_all$Run_Identifier <- paste(Simulations_all$Run, Simulations_all$Mut_freq, Simulations_all$Sel_Coeff, sep = "_")
+Simulations_all$Sel_Coeff <- as.factor(Simulations_all$Sel_Coeff)
+
+# Create unique identifier
+Simulations_all$Unique_Identifier <- paste(Simulations_all$Run, Simulations_all$Generation, Simulations_all$Mut_freq, Simulations_all$Sel_Coeff, sep="_")
+
+# Get an idea when the values plateau
+hist(Simulations_all$Generation)
+
+# Cut data at 1000 Generations
+Simulations_all_1000 <- subset(Simulations_all, Generation <= 1000)
+Simulations_all_1000
+```
+
+## Generate dataframe from 1 to 1,000 for all Runs (in case the mutation was lost, the data generation is stopped. In this case, we need to fill it up with 0s to calculate mean values and confidence intervals)
+```{r}
+# Generation of an base data frame
+base_df1 <- data.frame( Sel_Coeff = rep(c(0, -0.05, -0.1, -0.2, -0.3, -0.4), times = 4), Mut_freq = rep(c(0.05, 0.1, 0.4, 0.7), each = 6))
+  
+# Repeat data frame as many runs needed
+base_df2 <- base_df1[rep(seq_len(nrow(base_df1)), each = 400), ]
+# Add Run column
+base_df2$Run <- rep(seq(1:400), times = 24)
+
+# Repeat data frame as many generations needed
+base_df3 <- base_df2[rep(seq_len(nrow(base_df2)), each = 1000), ]
+# Add Generation column
+base_df3$Generation <- rep(seq(1:1000), times = 4*6*400)
+
+# Unique identifier per row
+base_df3$Unique_Identifier <- paste(base_df3$Run, base_df3$Generation, base_df3$Mut_freq, base_df3$Sel_Coeff, sep="_")
+head(base_df3)
+
+# Merge with real data
+Simulations_complete <- merge(base_df3, Simulations_all_1000, by = "Unique_Identifier", all = TRUE)
+
+# Convert NA's to 0's
+Simulations_complete$Allele_freq <- sapply(Simulations_complete$Allele_freq, FUN = function(x){if(is.na(x)){x<-0}else{x<-x}})
+
+Simulations_complete
+Simulations_complete1 <- Simulations_complete[ ,c(1,2,3,4,5,18,21)]
+Simulations_complete1$Sel_Coeff.x <- factor(Simulations_complete1$Sel_Coeff.x, levels = c("0", "-0.05", "-0.1", "-0.2","-0.3", "-0.4"))
+Simulations_complete1
+```
+
+## Calculate mean values
+```{r}
+sim_mean <- aggregate(Simulations_complete1$Allele_freq , by=list(Simulations_complete1$Generation.x, Simulations_complete1$Sel_Coeff.x, Simulations_complete1$Mut_freq.x), FUN = mean)
+
+colnames(sim_mean) <- c('Generation',  'Sel_Coeff', 'Mut_freq', 'Mean')
+
+sim_mean
+```
+
+## Calculate confidence intervals, default 0.95 (Attention: Calculation takes several hours!)
+```{r}
+# There is no variation in the first generation, therefore first generation is removed for this calculation.
+
+# Remove first generation
+Simulations_complete_subset_ <- subset(Simulations_complete1, Generation.x > 1)
+
+# Calculate confidence intervals
+library(rcompanion)
+confis <- groupwiseMean(data = Simulations_complete_subset_,
+              var         = "Allele_freq",
+              group       = c("Generation.x", "Sel_Coeff.x", "Mut_freq.x"),
+              traditional = FALSE,
+              percentile  = TRUE, na.rm = TRUE)
+                                   
+
+save.image(file = "Simulations_TSR_lasting.RData")
+```
+
+## Subset mean for allele frequency 0 to know the generation, in which the mutation is lost.
+```{r}
+sim_mean
+
+mean_0 <- subset(sim_mean, Mean == 0)
+mean_0
+
+aggregate(mean_0$Generation, list(mean_0$Sel_Coeff, mean_0$Mut_freq), min)
+```
+
+## Subset for each TSR frequency to plot them individually
+```{r}
+confis
+confis_0.05 <- subset(confis, Mut_freq.x == 0.05)
+confis_0.1 <- subset(confis, Mut_freq.x == 0.1)
+confis_0.4 <- subset(confis, Mut_freq.x == 0.4)
+confis_0.7 <- subset(confis, Mut_freq.x == 0.7)
+```
+
+## Combined plot for all allele frequencies
+```{r}
+library(ggplot2)
+
+p2 <- ggplot(data=confis, aes(x=Generation.x, y=Mean , group=Sel_Coeff.x)) + facet_grid(. ~ Mut_freq.x) + 
+  geom_ribbon(aes(ymin = Percentile.lower, ymax = Percentile.upper, fill=Sel_Coeff.x), alpha = 0.3) +
+  geom_line(aes(y = Mean, x = Generation.x, color = Sel_Coeff.x )) + ylim(0,0.8) + xlab("Generation") +ylab("Allele frequency") + coord_cartesian(xlim=c(0,300)) +scale_colour_manual(name="Sel. coefficient",values=c("#bd0026","#252525", "#969696","#f1b6da","#e6b800","#d9d9d9"))  +scale_fill_manual(name="Sel. coefficient",values=c("#bd0026","#252525", "#969696","#f1b6da","#e6b800","#d9d9d9")) + guides(color = guide_legend(override.aes = list(size = 3))) + theme_light() + theme(text=element_text(size=20))
+p2
+
+png(file = "Allele_freq_TSR_lasting.png" ,  width = 600, height = 150, units='mm', res = 300)
+  print(p2)
+dev.off()
+  
+
+pdf(file = "Allele_freq_TSR_lasting.pdf" , width = 20, height = 5)
+  print(p2)
+dev.off()
+
+```
+
+## Allele freq = 0.7
+```{r}
+p3 <- ggplot(data=confis_0.7, aes(x=Generation.x, y=Mean , group=Sel_Coeff.x)) + 
+  geom_ribbon(aes(ymin = Percentile.lower, ymax = Percentile.upper, fill=Sel_Coeff.x), alpha = 0.3) +
+  geom_line(aes(y = Mean, x = Generation.x, color = Sel_Coeff.x), size=0.8) + ylim(-0.15,0.8) + xlab("Generation") +ylab("Allele frequency") + coord_cartesian(xlim=c(0,300)) +scale_colour_manual(name="Sel. coefficient",values=c("#bd0026","#252525", "#969696","#f1b6da","#e6b800","#d9d9d9"))  +scale_fill_manual(name="Sel. coefficient",values=c("#bd0026","#252525", "#969696","#f1b6da","#e6b800","#d9d9d9")) + guides(color = guide_legend(override.aes = list(size = 3))) + theme_light() + theme(text=element_text(size=18)) +
+  geom_segment(aes(x = 351, y = -0.1, xend = 351, yend = 0), linetype="dashed", size=0.3, color="#969696") + annotate("text", x = 351, y = -0.15, label = "351", size = 5.5, color="#969696") +
+  geom_segment(aes(x = 155, y = -0.1, xend = 155, yend = 0), linetype="dashed", size=0.3, color="#f1b6da") + annotate("text", x = 155, y = -0.15, label = "155", size = 5.5, color="#f1b6da") +
+  geom_segment(aes(x = 101, y = -0.1, xend = 101, yend = 0), linetype="dashed", size=0.3, color="#e6b800") + annotate("text", x = 110, y = -0.15, label = "101", size = 5.5, color="#e6b800") +
+  geom_segment(aes(x = 86, y = -0.1, xend = 86, yend = 0), linetype="dashed", size=0.3, color="#d9d9d9") + annotate("text", x = 75, y = -0.15, label = "86", size = 5.5, color="#d9d9d9") 
+
+p3
+
+png(file = "Allele_freq_TSR_lasting_0.7.png" ,  width = 140, height = 80, units='mm', res = 300)
+  print(p3)
+dev.off()
+  
+
+pdf(file = "Allele_freq_TSR_lasting_0.7.pdf" , width = 5.5, height = 3)
+  print(p3)
+dev.off()
+
+```
+
+## Allele freq = 0.4
+```{r}
+p4.b <- ggplot(data=confis_0.4, aes(x=Generation.x, y=Mean , group=Sel_Coeff.x)) + 
+  geom_ribbon(aes(ymin = Percentile.lower, ymax = Percentile.upper, fill=Sel_Coeff.x), alpha = 0.3) +
+  geom_line(aes(y = Mean, x = Generation.x, color = Sel_Coeff.x), size=0.8 ) + ylim(-0.07,0.5) + xlab("Generation") +ylab("Allele frequency") + coord_cartesian(xlim=c(0,300)) +scale_colour_manual(name="Sel. coefficient",values=c("#bd0026","#252525", "#969696","#f1b6da","#e6b800","#d9d9d9"))  +scale_fill_manual(name="Sel. coefficient",values=c("#bd0026","#252525", "#969696","#f1b6da","#e6b800","#d9d9d9")) + guides(color = guide_legend(override.aes = list(size = 3))) + theme_light() + theme(text=element_text(size=18)) + 
+  geom_segment(aes(x = 258, y = -0.04, xend = 258, yend = 0), linetype="dashed", size=0.3, color="#969696") + annotate("text", x = 258, y = -0.07, label = "258", size = 5.5, color="#969696") +
+  geom_segment(aes(x = 151, y = -0.04, xend = 151, yend = 0), linetype="dashed", size=0.3, color="#f1b6da") + annotate("text", x = 151, y = -0.07, label = "151", size = 5.5, color="#f1b6da") +
+  geom_segment(aes(x = 105, y = -0.04, xend = 105, yend = 0), linetype="dashed", size=0.3, color="#e6b800") + annotate("text", x = 105, y = -0.07, label = "105", size = 5.5, color="#e6b800") +
+  geom_segment(aes(x = 68, y = -0.04, xend = 68, yend = 0), linetype="dashed", size=0.3, color="#d9d9d9") + annotate("text", x = 68, y = -0.07, label = "68", size = 5.5, color="#d9d9d9") 
+
+p4.b
+
+png(file = "Allele_freq_TSR_lasting_0.4_ylim.png" ,  width = 140, height = 80, units='mm', res = 300)
+  print(p4.b)
+dev.off()
+  
+
+pdf(file = "Allele_freq_TSR_lasting_0.4_ylim.pdf" , width = 5.5, height = 3)
+  print(p4.b)
+dev.off()
+```
+
+## Allele freq = 0.1
+```{r}
+p5.b <- ggplot(data=confis_0.1, aes(x=Generation.x, y=Mean , group=Sel_Coeff.x)) + 
+  geom_ribbon(aes(ymin = Percentile.lower, ymax = Percentile.upper, fill=Sel_Coeff.x), alpha = 0.3) +
+  geom_line(aes(y = Mean, x = Generation.x, color = Sel_Coeff.x), size=0.8 ) + ylim(-0.02,0.12) + xlab("Generation") +ylab("Allele frequency") + coord_cartesian(xlim=c(0,300)) +scale_colour_manual(name="Sel. coefficient",values=c("#bd0026","#252525", "#969696","#f1b6da","#e6b800","#d9d9d9"))  +scale_fill_manual(name="Sel. coefficient",values=c("#bd0026","#252525", "#969696","#f1b6da","#e6b800","#d9d9d9")) + guides(color = guide_legend(override.aes = list(size = 3))) + theme_light() + theme(text=element_text(size=18)) + 
+  geom_segment(aes(x = 261, y = -0.01, xend = 261, yend = 0), linetype="dashed", size=0.3, color="#969696") + annotate("text", x = 261, y = -0.02, label = "261", size = 5.5, color="#969696") +
+  geom_segment(aes(x = 114, y = -0.01, xend = 114, yend = 0), linetype="dashed", size=0.3, color="#f1b6da") + annotate("text", x = 132, y = -0.02, label = "114", size = 5.5, color="#f1b6da") +
+  geom_segment(aes(x = 86, y = -0.01, xend = 86, yend = 0), linetype="dashed", size=0.3, color="#e6b800") + annotate("text", x = 97, y = -0.02, label = "86", size = 5.5, color="#e6b800") +
+  geom_segment(aes(x = 78, y = -0.01, xend = 78, yend = 0), linetype="dashed", size=0.3, color="#d9d9d9") + annotate("text", x = 68, y = -0.02, label = "78", size = 5.5, color="#d9d9d9") 
+
+p5.b
+
+png(file = "Allele_freq_TSR_lasting_0.1_ylim.png" ,  width = 140, height = 80, units='mm', res = 300)
+  print(p5.b)
+dev.off()
+  
+
+pdf(file = "Allele_freq_TSR_lasting_0.1_ylim.pdf" , width = 5.5, height = 3)
+  print(p5.b)
+dev.off()
+```
+
+## Allele freq = 0.05
+```{r}
+p6.b <- ggplot(data=confis_0.05, aes(x=Generation.x, y=Mean , group=Sel_Coeff.x)) + 
+  geom_ribbon(aes(ymin = Percentile.lower, ymax = Percentile.upper, fill=Sel_Coeff.x), alpha = 0.3) +
+  geom_line(aes(y = Mean, x = Generation.x, color = Sel_Coeff.x), size=0.8 ) + ylim(-0.009,0.06) + xlab("Generation") +ylab("Allele frequency") + coord_cartesian(xlim=c(0,300)) + scale_colour_manual(name="Sel. coefficient",values=c("#bd0026","#252525", "#969696","#f1b6da","#e6b800","#d9d9d9"))  +scale_fill_manual(name="Sel. coefficient",values=c("#bd0026","#252525", "#969696","#f1b6da","#e6b800","#d9d9d9")) + guides(color = guide_legend(override.aes = list(size = 3))) + theme_light() + theme(text=element_text(size=18)) + 
+  geom_segment(aes(x = 258, y = -0.005, xend = 258, yend = 0), linetype="dashed", size=0.3, color="#969696") + annotate("text", x = 258, y = -0.009, label = "258", size = 5.5, color="#969696") +
+  geom_segment(aes(x = 117, y = -0.005, xend = 117, yend = 0), linetype="dashed", size=0.3, color="#f1b6da") + annotate("text", x = 129, y = -0.009, label = "117", size = 5.5, color="#f1b6da") +
+  geom_segment(aes(x = 104, y = -0.005, xend = 104, yend = 0), linetype="dashed", size=0.3, color="#e6b800") + annotate("text", x = 88, y = -0.009, label = "104", size = 5.5, color="#e6b800") +
+  geom_segment(aes(x = 62, y = -0.005, xend = 62, yend = 0), linetype="dashed", size=0.3, color="#d9d9d9") + annotate("text", x = 54, y = -0.009, label = "62", size = 5.5, color="#d9d9d9") 
+
+p6.b
+
+png(file = "Allele_freq_TSR_lasting_0.05_ylim.png" ,  width = 140, height = 80, units='mm', res = 300)
+  print(p6.b)
+dev.off()
+  
+
+pdf(file = "Allele_freq_TSR_lasting_0.05_ylim.pdf" , width = 5.5, height = 3)
+  print(p6.b)
+dev.off()
+```

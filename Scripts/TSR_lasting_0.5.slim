@@ -1,0 +1,51 @@
+//Default: Wright-Fisher model
+
+initialize()
+{
+	if (!exists("RUNID")) {
+		defineConstant("RUNID", 1);
+	}
+	if (!exists("SEL_COEFF")) {
+		defineConstant("SEL_COEFF", -0.1);
+	}
+	if (!exists("FREQ")) {
+		defineConstant("FREQ", 0.8);
+	}
+	if (!exists("POPSIZE")) {
+		defineConstant("POPSIZE", 42000);
+	}
+	if (!exists("PROP")) {
+		defineConstant("PROP", 33600);
+	}
+	initializeMutationRate(3.0e-8);
+	// m1 mutation type: neutral
+	// 0.5 = dominance coefficient
+	// 0.0 = selection coefficient
+	initializeMutationType("m1", 0.5, "f", 0.0); // neutral
+	m1.convertToSubstitution = T;
+	initializeMutationType("m2", 0.5, "f", SEL_COEFF); // introduces deleterious, dominant mutation
+	m2.convertToSubstitution = F;
+	m2.color = "red";
+	initializeGenomicElementType("g1", m1, 1.0);
+	initializeGenomicElement(g1, 0, 999);
+	initializeRecombinationRate(7.4e-9); //
+}
+
+1 { // save this run's identifier, used to save and restore
+	defineConstant("simID", getSeed());
+	sim.addSubpop("p1", asInteger(POPSIZE)); // effective population size
+	}
+
+// Introduce deleterious mutation in FREQ*POPSIZE*2
+1 late() {target = sample(p1.genomes, PROP);
+	target.addNewDrawnMutation(m2, 100);}
+
+1:2000 late(){ sim.outputMutations(sim.mutationsOfType(m2));}
+
+2000 late() {
+	
+	if (sim.countOfMutationsOfType(m2) == 0)
+	
+	{fixed = (sum(sim.substitutions.mutationType == m2) == 1);
+		
+		cat(ifelse(fixed, "FIXED\n", "LOST\n"));}}
