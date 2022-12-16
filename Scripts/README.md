@@ -8,7 +8,7 @@ script_cluster2fasta.sh extracts the consensus sequences generated in the cluste
 
 
 The simulation runs were performed with the software [SLiM](https://messerlab.org/slim).
-The following scripts for the two dominant coefficients were used:
+The following scripts for the two different dominant coefficients were used:
 - TSR_lasting_0.25.slim 
 - TSR_lasting_0.5.slim
 - with the param_file.txt containing all input parameter combination used.
