@@ -1,0 +1,216 @@
+---
+title: "Rscript_Figure3_classical_SNP_calling"
+output: html_document
+---
+
+## Comments related to BASH part
+
+After running 'script_Figure3_reads_freebayes2.sh' for each pool and before running 'script_Figure3_reads_mergeVCFs.sh', couple manual edits were necessary: 
+
+Population 27967 has an alignment error for position 373853 A to T (IGV check)
+Position 373849 contains a long indel and covers that TSR
+
+```{bash}
+
+TABIX=<PATH_TO_TABIX>
+$TABIX/bgzip -c 27967_F284.q30.ACCase_001213F_variants.vcf > 27967_F284.q30.ACCase_001213F_variants.vcf.gz
+$TABIX/tabix -p vcf 27967_F284.q30.ACCase_001213F_variants.vcf.gz
+
+```
+
+
+## R analysis
+
+Load datset
+```{r}
+library(readr)
+
+All_ACC_AGRIS42_variants <- read.table("input_files_Rscripts/All_ACC_AGRIS42_variants.txt", sep="\t", header=TRUE)
+All_ACC_AGRIS42_variants
+head(All_ACC_AGRIS42_variants)
+All_ACC_AGRIS42_TSRs <- subset(All_ACC_AGRIS42_variants,  POS == "373853" | POS == "373854" | POS == "373855" | POS == "374507" | POS == "374508" | POS == "374509" | POS == "374591" | POS == "374592" | POS == "374593" | POS == "374633" | POS == "374634"  | POS == "374635" |POS == "374744" |POS == "374745" | POS == "374746" | POS =="374774" | POS =="374775" |POS =="374776"| POS == "374798"| POS == "374799" | POS == "374800")
+All_ACC_AGRIS42_TSRs
+
+```
+
+# Loop to get AD
+```{r}
+
+for (i in seq(6, length(All_ACC_AGRIS42_TSRs),2)) {
+  All_ACC_AGRIS42_TSRs[,i] <- as.numeric(sapply(strsplit(as.character(All_ACC_AGRIS42_TSRs[,i]), "[,]"), "[", 2))
+}
+
+All_ACC_AGRIS42_TSRs
+
+```
+
+# Loop to calculate DP
+```{r}
+## Collect sample names
+populations <- sapply(strsplit(as.character(colnames(All_ACC_AGRIS42_TSRs)[ seq(6, length(All_ACC_AGRIS42_TSRs),2)]), "[.]"), "[", 1)
+
+
+## Generate new dataframe:
+AF_AGRIS42_TSRs <- All_ACC_AGRIS42_TSRs[,1:4]
+
+
+## Divide AD through DP:
+
+#Define start index bzw. start column to write:
+index <- 5
+
+# Loop through previous dataframe starting from column 6 taking every second column:
+# While doing that filling the 5th column of the new generated dataframe and moving forward:
+
+for (i in seq(6, length(All_ACC_AGRIS42_TSRs),2)) {
+  
+  AF_AGRIS42_TSRs[,index] <-  All_ACC_AGRIS42_TSRs[ , i] / All_ACC_AGRIS42_TSRs[, i-1]
+  index <- index + 1
+}
+
+#Add population names:
+
+colnames(AF_AGRIS42_TSRs)[5:length(AF_AGRIS42_TSRs)]  <- populations
+
+AF_AGRIS42_TSRs
+ 
+```
+
+# Transform dataframe
+```{r}
+AF_AGRIS42_TSRs$POS[AF_AGRIS42_TSRs$POS==373853 & AF_AGRIS42_TSRs$ALT == "T" ] <- "Ile1781.1_Leu"
+AF_AGRIS42_TSRs$POS[AF_AGRIS42_TSRs$POS==373853 & AF_AGRIS42_TSRs$ALT == "C" ] <- "Ile1781.1_Leu"
+AF_AGRIS42_TSRs$POS[AF_AGRIS42_TSRs$POS==373853 & AF_AGRIS42_TSRs$ALT == "G" ] <- "Ile1781.1_Val"
+AF_AGRIS42_TSRs$POS[AF_AGRIS42_TSRs$POS==373854 & AF_AGRIS42_TSRs$ALT == "C"] <- "Ile1781.2_Thr"
+AF_AGRIS42_TSRs$POS[AF_AGRIS42_TSRs$POS==374508 & AF_AGRIS42_TSRs$ALT == "T"] <- "Trp1999.2_Leu"
+AF_AGRIS42_TSRs$POS[AF_AGRIS42_TSRs$POS==374508 & AF_AGRIS42_TSRs$ALT == "C"] <- "Trp1999.2_Ser"
+AF_AGRIS42_TSRs$POS[AF_AGRIS42_TSRs$POS==374592 & AF_AGRIS42_TSRs$ALT == "T"] <- "Trp2027.2_Leu"
+AF_AGRIS42_TSRs$POS[AF_AGRIS42_TSRs$POS==374593 & AF_AGRIS42_TSRs$ALT == "T"] <- "Trp2027.3_Cys"
+AF_AGRIS42_TSRs$POS[AF_AGRIS42_TSRs$POS==374593 & AF_AGRIS42_TSRs$ALT == "C"] <- "Trp2027.3_Cys"
+AF_AGRIS42_TSRs$POS[AF_AGRIS42_TSRs$POS==374633 & AF_AGRIS42_TSRs$ALT == "G"] <- "Ile2041.1_Val"
+AF_AGRIS42_TSRs$POS[AF_AGRIS42_TSRs$POS==374634 & AF_AGRIS42_TSRs$ALT == "A"] <- "Ile2041.2_Asn"
+AF_AGRIS42_TSRs$POS[AF_AGRIS42_TSRs$POS==374634 & AF_AGRIS42_TSRs$ALT == "C"] <- "Ile2041.2_Thr"
+AF_AGRIS42_TSRs$POS[AF_AGRIS42_TSRs$POS==374745 & AF_AGRIS42_TSRs$ALT == "G"] <- "Asp2078.2_Gly"
+AF_AGRIS42_TSRs$POS[AF_AGRIS42_TSRs$POS==374799 & AF_AGRIS42_TSRs$ALT == "C"] <- "Gly2096.2_Ala"
+AF_AGRIS42_TSRs
+AF_AGRIS42_TSRs$TSR <- paste(AF_AGRIS42_TSRs$POS,AF_AGRIS42_TSRs$ALT,sep="_")
+rownames(AF_AGRIS42_TSRs) <- AF_AGRIS42_TSRs[,68]
+
+AF_AGRIS42_TSRs1 <- AF_AGRIS42_TSRs[,c(5:67)] 
+AF_AGRIS42_TSRs2 <- t(AF_AGRIS42_TSRs1)
+AF_AGRIS42_TSRs2
+AF_AGRIS42_TSRs2 <- as.data.frame(AF_AGRIS42_TSRs2)
+dim(AF_AGRIS42_TSRs2)
+
+AF_AGRIS42_pops <- AF_AGRIS42_TSRs2[1:63,]
+AF_AGRIS42_pops
+names <- rownames(AF_AGRIS42_pops)
+AF_AGRIS42_pops1 <- cbind(names,AF_AGRIS42_pops)
+AF_AGRIS42_pops1 <- as.data.frame(AF_AGRIS42_pops1)
+AF_AGRIS42_pops1$populations <- substring(AF_AGRIS42_pops1$names, 2,6)
+AF_AGRIS42_pops1
+
+```
+
+```{r}
+library(readxl)
+Metadata_Agris42_pops <- read_excel("input_files_Rscripts/Metadata_Agris42_pops.xlsx")
+colnames(Metadata_Agris42_pops)[1] <- "populations"
+head(Metadata_Agris42_pops)
+unique(Metadata_Agris42_pops$treatement)
+AGRIS42_all <- merge(AF_AGRIS42_pops1,Metadata_Agris42_pops, by="populations")
+AGRIS42_all
+
+AGRIS42_all1 <- AGRIS42_all[, c(1,31,32,34,17,3:14)]
+AGRIS42_all1$AXIAL_BinScore <- as.factor(AGRIS42_all1$AXIAL_BinScore)
+AGRIS42_all1$FOCUS_BinScore <- as.factor(AGRIS42_all1$FOCUS_BinScore)
+AGRIS42_all1
+library("reshape")
+AGRIS42_all2 <- melt(AGRIS42_all1, id.vars=1:5)
+colnames(AGRIS42_all2)[6] <- "TSR"
+AGRIS42_all2
+```
+
+```{r}
+library(dplyr)
+AGRIS42_all2
+AGRIS42_all2_counts <- count_(AGRIS42_all2, c("populations", "TSR", "value"))
+AGRIS42_all2_counts <- na.omit(AGRIS42_all2_counts)
+AGRIS42_all2_counts
+AGRIS42_all2_counts1 <- count_(AGRIS42_all2_counts, "populations")
+AGRIS42_all2_counts1
+
+AGRIS42_all <- merge(AGRIS42_all, AGRIS42_all2_counts1, by="populations", all=TRUE )
+AGRIS42_all$farmer <- sapply(strsplit(as.character(AGRIS42_all$names), "[_]"), "[", 2)
+AGRIS42_all$joint_id <- paste(AGRIS42_all$farmer, AGRIS42_all$populations, sep="_")
+AGRIS42_all
+AGRIS42_all1 <- AGRIS42_all[, c(1,31,32,34,17,46,48,3:14)]
+AGRIS42_all2 <- melt(AGRIS42_all1, id.vars=1:7)
+colnames(AGRIS42_all2)[8] <- "TSR"
+AGRIS42_all2
+```
+
+```{r}
+pdf(file="AF_Agris42_populations_Axial.pdf", width = 19, height = 5)
+
+p1 <- ggplot(data=AGRIS42_all2, aes(x=joint_id, y=value, fill=TSR)) + geom_bar(stat="identity") + facet_grid(~AXIAL_BinScore, scales = "free_x", space="free") + theme_light() + theme(axis.text.x = element_text(angle =90, vjust=0.5, hjust = 0)) + scale_y_continuous(breaks = seq(0,1, by=0.1), limits=c(0,1), expand = c(0,0)) + scale_fill_manual(values=c("#bd0026", "#ff8080", "#800026", "#fd8d3c", "#006666", "#00b3b3", "#b30086", "#ff00ff","#f1b6da", "#002db3", "#e6b800", "#a31aff")) + ylab("Allele frequency") + ggtitle("Allele frequencies Agris42 populations - Axial phenotyping")+ theme(axis.title.x = element_blank())  + theme(text=element_text(size=20))+ theme(strip.text.x=element_text(size=23))
+
+p1
+dev.off()
+
+png("AF_Agris42_populations_Axial.png", width = 500, height = 130, units='mm', res = 300)
+p1
+dev.off()
+```
+
+```{r}
+unique(AGRIS42_all2$FOCUS_BinScore)
+AGRIS42_all2$FOCUS_BinScore = factor(AGRIS42_all2$FOCUS_BinScore, levels=c("0", "3", "4", "6","7","8", "9", "10", "NA"))
+
+pdf(file="AF_Agris42_populations_Focus.pdf", width = 19, height = 5)
+
+p2 <- ggplot(data=AGRIS42_all2, aes(x=joint_id, y=value, fill=TSR)) + geom_bar(stat="identity") + facet_grid(~FOCUS_BinScore, scales = "free_x", space="free") + theme_light() + theme(axis.text.x = element_text(angle =90, vjust=0.5, hjust = 0)) + scale_y_continuous(breaks = seq(0,1, by=0.1), limits=c(0,1), expand = c(0,0)) + scale_fill_manual(values=c("#bd0026", "#ff8080", "#800026", "#fd8d3c", "#006666", "#00b3b3", "#b30086", "#ff00ff","#f1b6da", "#002db3", "#e6b800", "#a31aff")) + ylab("Allele frequency") + ggtitle("Allele frequencies Agris42 populations - Focus phenotyping")+ theme(axis.title.x = element_blank())  + theme(text=element_text(size=20))+ theme(strip.text.x=element_text(size=23))
+
+p2
+dev.off()
+
+png("AF_Agris42_populations_Focus.png", width = 500, height = 130, units='mm', res = 300)
+p2
+dev.off()
+
+```
+
+```{r}
+unique(AGRIS42_all2$treatement)
+AGRIS42_all2$treatement = factor(AGRIS42_all2$treatement, levels=c("ACCase", "PRE+ACCase", "ALS", "PRE+ALS","ACCase+ALS", "PRE", "Organic"))
+
+pdf(file="AF_Agris42_populations_treatments.pdf", width = 19, height = 5)
+
+p3 <- ggplot(data=AGRIS42_all2, aes(x=joint_id, y=value, fill=TSR)) + geom_bar(stat="identity") + facet_grid(~treatement, scales = "free_x", space="free") + theme_light() + theme(axis.text.x = element_text(angle =90, vjust=0.5, hjust = 0)) + scale_y_continuous(breaks = seq(0,1, by=0.1), limits=c(0,1), expand = c(0,0)) + scale_fill_manual(values=c("#bd0026", "#ff8080", "#800026", "#fd8d3c", "#006666", "#00b3b3", "#b30086", "#ff00ff","#f1b6da", "#002db3", "#e6b800", "#a31aff")) + ylab("Allele frequency") + ggtitle("Allele frequencies Agris42 populations - Field treatments")+ theme(axis.title.x = element_blank()) + theme(text=element_text(size=15)) + theme(strip.text.x=element_text(size=20))+ theme(strip.text.x=element_text(size=10))
+
+p3
+dev.off()
+
+png("AF_Agris42_populations_treatments.png", width = 500, height = 130, units='mm', res = 300)
+p3
+dev.off()
+```
+
+```{r}
+AGRIS42_all2
+
+pdf(file="AF_Agris42_populations_location.pdf", width = 19, height = 5)
+
+p4 <- ggplot(data=AGRIS42_all2, aes(x=joint_id, y=value, fill=TSR)) + geom_bar(stat="identity") + facet_grid(~bundesland_abbr, scales = "free_x", space="free") + theme_light() + theme(axis.text.x = element_text(angle =90, vjust=0.5, hjust = 0)) + scale_y_continuous(breaks = seq(0,1, by=0.1), limits=c(0,1), expand = c(0,0)) + scale_fill_manual(values=c("#bd0026", "#ff8080", "#800026", "#fd8d3c", "#006666", "#00b3b3", "#b30086", "#ff00ff","#f1b6da", "#002db3", "#e6b800", "#a31aff")) + ylab("Allele frequency") + ggtitle("Allele frequencies Agris42 populations - Geographic location") + theme(axis.title.x = element_blank()) + theme(text=element_text(size=20)) + theme(strip.text.x=element_text(size=23))
+
+p4
+dev.off()
+
+png("AF_Agris42_populations_location.png", width = 500, height = 130, units='mm', res = 300)
+p4
+dev.off()
+```
+
+```{r}
+
+```

@@ -1,0 +1,200 @@
+---
+title: "Rscript_Figure5_estimate_average_generations"
+output: html_document
+date: '2022-12-17'
+---
+
+
+# Function to estimate the average number of generations at which all simulations reach 0 allele frequency
+
+```{r}
+
+DIRECTORY <- "input_files_Rscripts"
+POPULATION_SIZE <- 21000
+DOMINANCE <- 0.5
+
+simulations_lasting <- function(DIRECTORY = "input_files_Rscripts", POPULATION_SIZE = 21000, DOMINANCE = 0.5){
+  
+  library(readr)
+  Simulations_all <- read_table2(paste0(DIRECTORY, "/All_runs_", POPULATION_SIZE, "_", DOMINANCE, ".txt"), col_names=FALSE)
+
+  colnames(Simulations_all) [2] <- "Generation"
+  colnames(Simulations_all) [8] <- "Sel_Coeff"
+
+  # Generate relevant analysis parameters
+  Simulations_all$Allele_freq <- Simulations_all$X12/(POPULATION_SIZE * 2)      # Is this 21,000 times 2X ?
+
+  Simulations_all$Run <- sapply(strsplit(as.character(Simulations_all$X1), "[.]"), "[", 3)
+
+  Simulations_all$Mut_freq <- as.numeric(paste(0, sapply(strsplit(as.character(Simulations_all$X1), "[.]"), "[", 5 ), sep='.'))  
+
+  Simulations_all$Run_Identifier <- paste(Simulations_all$Run, Simulations_all$Mut_freq, Simulations_all$Sel_Coeff, sep = "_")
+
+  Simulations_all$Sel_Coeff <- as.factor(Simulations_all$Sel_Coeff)
+
+  # Create unique identifier
+  Simulations_all$Unique_Identifier <- paste(Simulations_all$Run, Simulations_all$Generation, Simulations_all$Mut_freq, Simulations_all$Sel_Coeff, sep="_")
+
+  # Generation of a base data frame
+  base_df1 <- data.frame( Sel_Coeff = as.factor(rep(c(0, -0.05, -0.1, -0.2, -0.3, -0.4), times = 4)), Mut_freq = rep(c(0.05, 0.10, 0.40, 0.70), each = 6))  
+
+  # Repeat data frame as many runs needed
+  base_df2 <- base_df1[rep(seq_len(nrow(base_df1)), each = 400), ]
+  # Add Run column
+  base_df2$Run <- rep(seq(1:400), times = 24)
+
+  # Repeat data frame as many generations needed
+  base_df3 <- base_df2[rep(seq_len(nrow(base_df2)), each = 2000), ]
+  # Add Generation column
+  base_df3$Generation <- rep(seq(1:2000), times = 4*6*400)
+
+  # Unique identifier per row
+  base_df3$Unique_Identifier <- paste(base_df3$Run, base_df3$Generation, base_df3$Mut_freq, base_df3$Sel_Coeff, sep="_")
+
+  # Merge with real data
+  start_time <- Sys.time()
+  Simulations_complete <- merge(base_df3, Simulations_all, by = "Unique_Identifier", all.x = TRUE)
+  end_time <- Sys.time()
+  end_time - start_time
+
+  # Convert NA's to 0's
+  Simulations_complete$Allele_freq <- sapply(Simulations_complete$Allele_freq, FUN = function(x){if(is.na(x)){x<-0}else{x<-x}})
+
+  Simulations_complete1 <- Simulations_complete[ ,c(1,2,3,4,5,18,21)]
+  Simulations_complete1$Sel_Coeff.x <- factor(Simulations_complete1$Sel_Coeff.x, levels = c("0", "-0.05", "-0.1", "-0.2","-0.3", "-0.4"))
+  
+  ###########################
+  ## Calculate mean values ##
+  sim_mean <- aggregate(Simulations_complete1$Allele_freq , by=list(Simulations_complete1$Generation.x, Simulations_complete1$Sel_Coeff.x, Simulations_complete1$Mut_freq.x), FUN = mean)
+  colnames(sim_mean) <- c('Generation',  'Sel_Coeff', 'Mut_freq', 'Mean')
+
+  sim_sd <- aggregate(Simulations_complete1$Allele_freq , by=list(Simulations_complete1$Generation.x, Simulations_complete1$Sel_Coeff.x, Simulations_complete1$Mut_freq.x), FUN = sd)
+  colnames(sim_sd) <- c('Generation',  'Sel_Coeff', 'Mut_freq', 'sd')
+
+  sim_mean_sd <- merge(sim_mean, sim_sd, by=c('Generation',  'Sel_Coeff', 'Mut_freq')) 
+
+  # Subset mean for allele frequency 0
+  mean_0 <- subset(sim_mean_sd, Mean == 0)
+  summary_table <- aggregate(mean_0$Generation, list(mean_0$Sel_Coeff, mean_0$Mut_freq), min)
+
+  ##                       ##
+  ###########################
+  
+  ###########################
+  ## Alternative calculation over min Generation (when allele freq reaches 0) for each single Run, then mean over 400 runs
+
+  # Subset all Generations of all single runs in which the allele freq became 0
+  Simulations_complete1_0 <- subset(Simulations_complete1, Allele_freq==0)
+
+  # Take the min Generation of each Run (that's the first generation of each Run, when the allele freq became 0 (cross with x axis))
+  Simulations_complete1_0_min <- aggregate(Simulations_complete1_0$Generation, list(Simulations_complete1_0$Sel_Coeff.x, Simulations_complete1_0$Mut_freq.x, Simulations_complete1_0$Run.x), min)
+  colnames(Simulations_complete1_0_min) <- c('Sel_Coeff',  'Mut_freq', 'Run','Generation')
+
+  # Count the data entries for each combination (400 runs is the expected value for selection coefficients other than 0)
+  print(table(Simulations_complete1_0_min$Sel_Coeff, Simulations_complete1_0_min$Mut_freq))
+
+  # calculate mean over 400 runs
+  sim_mean_Gen <- aggregate(Simulations_complete1_0_min$Generation , by=list(Simulations_complete1_0_min$Sel_Coeff, Simulations_complete1_0_min$Mut_freq), FUN = mean)
+  colnames(sim_mean_Gen) <- c('Sel_Coeff', 'Mut_freq', 'Generation_Mean')
+
+  # Calculate sd over 400 runs
+  sim_sd_Gen <- aggregate(Simulations_complete1_0_min$Generation , by=list(Simulations_complete1_0_min$Sel_Coeff, Simulations_complete1_0_min$Mut_freq), FUN = sd)
+  colnames(sim_sd_Gen) <- c('Sel_Coeff', 'Mut_freq', 'Generation_sd')
+
+  # Combine mean and sd
+  sim_mean_sd_Gen <- merge(sim_mean_Gen, sim_sd_Gen, by=c('Sel_Coeff',  'Mut_freq'))
+  sim_mean_sd_Gen$Population_size <- POPULATION_SIZE
+  sim_mean_sd_Gen$Dominance <- DOMINANCE
+  
+  
+  ## Save outputs
+  write.table(sim_mean_sd_Gen, file =paste0(POPULATION_SIZE, "_dom_", DOMINANCE, "/", "All_runs_summary", POPULATION_SIZE, "_", DOMINANCE, ".txt"), sep ="\t", row.names = FALSE, quote = FALSE)
+  
+}
+
+```
+
+
+```{r}
+
+simulations_lasting(DIRECTORY = "input_files_Rscripts", POPULATION_SIZE = 42000, DOMINANCE = 0.5)
+simulations_lasting(DIRECTORY = "input_files_Rscripts", POPULATION_SIZE = 42000, DOMINANCE = 0.25)
+
+simulations_lasting(DIRECTORY = "input_files_Rscripts", POPULATION_SIZE = 21000, DOMINANCE = 0.5)
+simulations_lasting(DIRECTORY = "input_files_Rscripts", POPULATION_SIZE = 21000, DOMINANCE = 0.25)
+
+
+simulations_lasting(DIRECTORY = "input_files_Rscripts", POPULATION_SIZE = 10500, DOMINANCE = 0.5)
+simulations_lasting(DIRECTORY = "input_files_Rscripts", POPULATION_SIZE = 10500, DOMINANCE = 0.25)
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+# Additional plot for Reviewer
+It shows that decreasing population size is predicted to slightly decrease the relevant time frames until a mutation disappears
+
+```{r, libraries}
+library(data.table)
+library(ggplot2)
+library(wesanderson)
+```
+
+```{r read the files}
+# Loop
+file_list <- list.files("input_files_Rscripts", pattern = "All_runs_summary*" , full.names = TRUE)
+file_list
+
+
+Effective_popsize_stats <- data.frame(matrix(ncol = 6) ) 
+colnames(Effective_popsize_stats) <- c('Sel_Coeff',	'Mut_freq',	'Generation_Mean',	'Generation_sd',	'Population_size',	'Dominance')
+Effective_popsize_stats
+
+for(i in 1:length(file_list)){
+  container <- fread(file_list[i], select = c('Sel_Coeff',	'Mut_freq',	'Generation_Mean',	'Generation_sd',	'Population_size',	'Dominance'), header = TRUE)
+  container <- as.data.frame(container)
+  Effective_popsize_stats <- rbind(Effective_popsize_stats, container)
+}
+
+Effective_popsize_stats <- Effective_popsize_stats[-1 , ]
+Effective_popsize_stats
+```
+
+
+```{r subset without Sel_Coeff 0}
+Effective_popsize_stats_wo_0 <- subset(Effective_popsize_stats, Sel_Coeff == -0.05 | Sel_Coeff == -0.1 | Sel_Coeff == -0.2 | Sel_Coeff == -0.3 | Sel_Coeff == -0.4)
+Effective_popsize_stats_wo_0
+Effective_popsize_stats_wo_0$Population_size <- as.character(Effective_popsize_stats_wo_0$Population_size)
+Effective_popsize_stats_wo_0$Sel_Coeff <- as.character(Effective_popsize_stats_wo_0$Sel_Coeff)
+```
+
+```{r plot}
+p1 <- ggplot(data=Effective_popsize_stats_wo_0, aes(x=Sel_Coeff , y= Generation_Mean, fill= Population_size)) + geom_bar(stat="identity", position=position_dodge()) + facet_wrap(. ~  Dominance + Mut_freq, ncol=4, labeller = label_both) + theme_light() + ylab("Generations") + xlab("Selection coefficient") + ggtitle("Generations of TSR mutations in a field without herbicide treatment") + theme(text = element_text(size=20)) + scale_fill_manual(name="Eff. population size", values = wes_palette("Darjeeling1", n = 3)) + geom_errorbar(aes(ymin=Generation_Mean-Generation_sd, ymax=Generation_Mean+Generation_sd), width=.2, position=position_dodge(.9)) + theme(axis.text.x = element_text(angle = 45, hjust=1))
+
+p1
+
+pdf("Generations_effective_popsizes_overview.pdf", height = 9, width = 14)
+p1
+dev.off()
+```
+
+
+# Summary table for Numbers along x-axis in Figure 5 for Ne=42000
+
+```{r subset for Ne 42,000}
+Summary_42000_0.25 <- subset(Effective_popsize_stats_wo_0, Population_size == 42000 & Dominance == 0.25)
+Summary_42000_0.25_ordered <- Summary_42000_0.25[order(Summary_42000_0.25$Mut_freq),]
+Summary_42000_0.25_ordered$Generation_Mean <- round(Summary_42000_0.25_ordered$Generation_Mean, digits = 0)
+write.table(Summary_42000_0.25_ordered, file ="Summary_0.25.txt", row.names = FALSE, col.names = TRUE, quote = FALSE)
+
+Summary_42000_0.5 <- subset(Effective_popsize_stats_wo_0, Population_size == 42000 & Dominance == 0.5)
+Summary_42000_0.5_ordered <- Summary_42000_0.5[order(Summary_42000_0.5$Mut_freq),]
+Summary_42000_0.5_ordered$Generation_Mean <- round(Summary_42000_0.5_ordered$Generation_Mean, digits = 0)
+write.table(Summary_42000_0.5_ordered, file ="Summary_0.5.txt", row.names = FALSE, col.names = TRUE, quote = FALSE)
+```

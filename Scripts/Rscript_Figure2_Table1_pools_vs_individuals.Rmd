@@ -1,0 +1,815 @@
+---
+title: "Rscript_Figure2_pools_vs_individuals"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### TSR annotation individuals
+```{r}
+library(vcfR)
+library(dplyr)
+
+# Read vcf file
+vcf <- read.vcfR("input_files_Rscripts/Figure2_individuals.ACCase_001213F.GVCF.ann.vcf")
+
+vcf_chrom <- create.chromR(name='001213F', vcf=vcf)
+genot_matrix <- as.data.frame(extract.gt(vcf_chrom, mask=FALSE))
+dim(genot_matrix)
+
+genot_matrix1 <- genot_matrix[which(rownames(genot_matrix) == "001213F_373853" | rownames(genot_matrix) == "001213F_373854" | rownames(genot_matrix) == "001213F_373855" | rownames(genot_matrix) == "001213F_374507" | rownames(genot_matrix) == "001213F_374508" | rownames(genot_matrix) == "001213F_374509" | rownames(genot_matrix) == "001213F_374591" | rownames(genot_matrix) == "001213F_374592" | rownames(genot_matrix) =="001213F_374593" | rownames(genot_matrix) =="001213F_374633" | rownames(genot_matrix) =="001213F_374634" | rownames(genot_matrix) =="001213F_374635" |  rownames(genot_matrix) == "001213F_374744"| rownames(genot_matrix) == "001213F_374745"| rownames(genot_matrix) == "001213F_374746"| rownames(genot_matrix) == "001213F_374774" | rownames(genot_matrix) == "001213F_374775" | rownames(genot_matrix) == "001213F_374776" | rownames(genot_matrix) == "001213F_374798" | rownames(genot_matrix) == "001213F_374799" | rownames(genot_matrix) == "001213F_374800"), ,drop=FALSE]
+
+rownames(genot_matrix1) <- as.numeric(sapply(strsplit(rownames(genot_matrix1), "[_]"), "[", 2))
+
+genot_matrix1
+
+# Known mutations
+ACCase_known <- data.frame(matrix(c('genot_Ile1781.1', 'Ile1781.1', 373853, 'genot_Ile1781.2', 'Ile1781.2_Thr_C', 373854, 'genot_Trp1999.2', 'Trp1999.2_Leu_T', 374508, 'genot_Trp2027.3', 'Trp2027.3', 374593, 'genot_Ile2041.2', 'Ile2041.2_Asn_A', 374634, 'genot_Asp2078.2', 'Asp2078.2_Gly_G', 374745), ncol = 3, byrow = TRUE))
+colnames(ACCase_known) <- c('Genotype', 'Simplified','coordinate')
+
+ACCase_known
+
+# Define samples
+samples <- colnames(genot_matrix1)
+populations <- sapply(strsplit(as.character(samples), "[_]"), "[", 1)
+country <- substring(populations, 1, 2)
+
+samples <- data.frame(cbind(samples, populations, country))
+samples
+# Extrat mutations from genotype matrix
+genot_matrix_subset <- genot_matrix1[ rownames(genot_matrix1) %in% ACCase_known$coordinate , ]
+genot_matrix_subset
+rownames(genot_matrix_subset) <- ACCase_known$Simplified
+
+
+# Switch rows and columns and add names
+known_TSR_ACC_RAXML <- cbind(samples, t(genot_matrix_subset))
+colnames(known_TSR_ACC_RAXML) [1] <- "sample"
+known_TSR_ACC_RAXML <- as.data.frame(known_TSR_ACC_RAXML)
+head(known_TSR_ACC_RAXML)
+
+# Since in this matrix all the individuals already haplotypes and therefore homozygous, we can eliminate one phase
+
+known_TSR_ACC_RAXML$Ile1781.1 <- as.numeric(unlist(lapply(strsplit(as.character(known_TSR_ACC_RAXML$Ile1781.1), "[/|]"), "[", 1)))
+known_TSR_ACC_RAXML$Ile1781.2_Thr_C <- as.numeric(unlist(lapply(strsplit(as.character(known_TSR_ACC_RAXML$Ile1781.2_Thr_C), "[/|]"), "[", 1)))
+known_TSR_ACC_RAXML$Trp1999.2_Leu_T <- as.numeric(unlist(lapply(strsplit(as.character(known_TSR_ACC_RAXML$Trp1999.2_Leu_T), "[/|]"), "[", 1)))
+known_TSR_ACC_RAXML$Trp2027.3 <- as.numeric(unlist(lapply(strsplit(as.character(known_TSR_ACC_RAXML$Trp2027.3), "[/|]"), "[", 1)))
+known_TSR_ACC_RAXML$Ile2041.2_Asn_A <- as.numeric(unlist(lapply(strsplit(as.character(known_TSR_ACC_RAXML$Ile2041.2_Asn_A), "[/|]"), "[", 1)))
+known_TSR_ACC_RAXML$Asp2078.2_Gly_G <- as.numeric(unlist(lapply(strsplit(as.character(known_TSR_ACC_RAXML$Asp2078.2_Gly_G), "[/|]"), "[", 1)))
+
+known_TSR_ACC_RAXML
+```
+
+```{r}
+unique(known_TSR_ACC_RAXML$Ile1781.1)
+
+#sample UK01726_24.h1 get's NA for position Ile1781.1. After checking IGV it is Alternative 1:
+
+known_TSR_ACC_RAXML$Ile1781.1[ which(known_TSR_ACC_RAXML$sample == 'UK01726_24.h1')  ] <- 1
+
+unique(known_TSR_ACC_RAXML$Ile1781.1)
+
+unique(known_TSR_ACC_RAXML$Ile1781.2_Thr_C)
+unique(known_TSR_ACC_RAXML$Trp1999.2_Leu_T)
+unique(known_TSR_ACC_RAXML$Ile2041.2_Asn_A)
+unique(known_TSR_ACC_RAXML$Asp2078.2_Gly_G)
+unique(known_TSR_ACC_RAXML$Trp2027.3)
+
+
+df3 <- data.frame(matrix(ncol = 5, nrow = 2092))
+x3 <- c("Ile1781.1_Leu_T","Ile1781.1_Leu_C", "Ile1781.1_Val_G", "Trp2027.3_Cys_T", "Trp2027.3_Cys_C")
+colnames(df3) <- x3
+df3
+
+all_phases <- cbind(known_TSR_ACC_RAXML, df3)
+all_phases
+```
+# Split the multiallelic sites
+```{r}
+all_phases1 <- all_phases
+
+all_phases1 <- mutate(all_phases1, Ile1781.1_Leu_T = ifelse(Ile1781.1 == 1,1,0))
+all_phases1 <- mutate(all_phases1, Ile1781.1_Leu_C = ifelse(Ile1781.1 == 2,1,0))
+all_phases1 <- mutate(all_phases1, Ile1781.1_Val_G = ifelse(Ile1781.1 == 3,1,0))
+all_phases1 <- mutate(all_phases1, Trp2027.3_Cys_T = ifelse(Trp2027.3 == 1,1,0))
+all_phases1 <- mutate(all_phases1, Trp2027.3_Cys_C = ifelse(Trp2027.3 == 2,1,0))
+
+# add wildtype column
+all_phases1$wildtype <- as.logical(all_phases1$Ile1781.1_Leu_T == 1 | all_phases1$Ile1781.1_Leu_C == 1 | all_phases1$Ile1781.1_Val_G ==1 | all_phases1$Trp2027.3_Cys_T == 1| all_phases1$Trp2027.3_Cys_C == 1| all_phases1$Ile1781.2_Thr_C == 1 | all_phases1$Trp1999.2_Leu_T == 1 | all_phases1$Ile2041.2_Asn_A == 1 | all_phases1$Asp2078.2_Gly_G == 1)
+
+all_phases1 <- mutate(all_phases1, wildtype = ifelse(wildtype == "FALSE",1,0))
+
+all_phases1
+
+```
+
+# Metadatatable
+```{r}
+metadata <- all_phases1[ ,c(1,2,10,11,12,5,6,13,14,8,9,15)]
+metadata_POPART_individuals <- metadata
+write.table(metadata_POPART_individuals, file= "metadata_POPART_individuals",row.names = FALSE, quote = FALSE)
+metadata
+```
+
+# Transform numbers into mutation names
+```{r}
+metadata1 <- metadata
+
+metadata1 <- mutate(metadata1, Ile1781.1_Leu_T = ifelse(Ile1781.1_Leu_T == 1,"Ile1781.1_Leu_T",NA))
+metadata1 <- mutate(metadata1, Ile1781.1_Leu_C = ifelse(Ile1781.1_Leu_C == 1,"Ile1781.1_Leu_C",NA))
+metadata1 <- mutate(metadata1, Ile1781.1_Val_G = ifelse(Ile1781.1_Val_G == 1,"Ile1781.1_Val_G",NA))
+metadata1 <- mutate(metadata1, Ile1781.2_Thr_C = ifelse(Ile1781.2_Thr_C == 1,"Ile1781.2_Thr_C",NA))
+metadata1 <- mutate(metadata1, Trp1999.2_Leu_T = ifelse(Trp1999.2_Leu_T == 1,"Trp1999.2_Leu_T",NA))
+metadata1 <- mutate(metadata1, Trp2027.3_Cys_T = ifelse(Trp2027.3_Cys_T == 1,"Trp2027.3_Cys_T",NA))
+metadata1 <- mutate(metadata1, Trp2027.3_Cys_C = ifelse(Trp2027.3_Cys_C == 1,"Trp2027.3_Cys_C",NA))
+metadata1 <- mutate(metadata1, Ile2041.2_Asn_A = ifelse(Ile2041.2_Asn_A == 1,"Ile2041.2_Asn_A",NA))
+metadata1 <- mutate(metadata1, Asp2078.2_Gly_G = ifelse(Asp2078.2_Gly_G == 1,"Asp2078.2_Gly_G",NA))
+metadata1 <- mutate(metadata1, wildtype = ifelse(wildtype == 1,"wildtype",NA))
+
+metadata1$Ile1781.1_Leu_T <- as.character(metadata1$Ile1781.1_Leu_T)
+metadata1
+
+```
+
+```{r}
+library(tidyr)
+
+metadata2 <- unite(metadata1, mut, Ile1781.1_Leu_T, Ile1781.1_Leu_C, Ile1781.1_Val_G, Ile1781.2_Thr_C, Trp1999.2_Leu_T, Trp2027.3_Cys_T, Trp2027.3_Cys_C, Ile2041.2_Asn_A, Asp2078.2_Gly_G, wildtype , sep = "_", remove = FALSE, na.rm = TRUE)
+metadata2
+
+unique(metadata2$mut)
+
+metadata2
+rownames(metadata2) <- metadata2$sample
+colnames(metadata2) [1] <- "label"
+TSR_individuals <- metadata2[ ,c(1,2,3)]
+TSR_individuals
+
+write.table(TSR_individuals, file= "TSR_ACC_individuals",row.names = FALSE, quote = FALSE)
+
+```
+
+```{r}
+
+
+```
+### TSR annotation pools
+# TSR labelling pool trees BASF for quality check, based on haplotype vcf
+```{r}
+library(vcfR)
+library(dplyr)
+
+# Read vcf file
+vcf <- read.vcfR("input_files_Rscripts/Figure2_pools.ACCase_001213F.GVCF.ann.vcf")
+
+vcf_chrom <- create.chromR(name='001213F', vcf=vcf)
+genot_matrix <- as.data.frame(extract.gt(vcf_chrom, mask=FALSE))
+dim(genot_matrix)
+
+genot_matrix1 <- genot_matrix[which(rownames(genot_matrix) == "001213F_373853" | rownames(genot_matrix) == "001213F_373854" | rownames(genot_matrix) == "001213F_373855" | rownames(genot_matrix) == "001213F_374507" | rownames(genot_matrix) == "001213F_374508" | rownames(genot_matrix) == "001213F_374509" | rownames(genot_matrix) == "001213F_374591" | rownames(genot_matrix) == "001213F_374592" | rownames(genot_matrix) =="001213F_374593" | rownames(genot_matrix) =="001213F_374633" | rownames(genot_matrix) =="001213F_374634" | rownames(genot_matrix) =="001213F_374635" |  rownames(genot_matrix) == "001213F_374744"| rownames(genot_matrix) == "001213F_374745"| rownames(genot_matrix) == "001213F_374746"| rownames(genot_matrix) == "001213F_374774" | rownames(genot_matrix) == "001213F_374775" | rownames(genot_matrix) == "001213F_374776" | rownames(genot_matrix) == "001213F_374798" | rownames(genot_matrix) == "001213F_374799" | rownames(genot_matrix) == "001213F_374800"), ,drop=FALSE]
+
+rownames(genot_matrix1) <- as.numeric(sapply(strsplit(rownames(genot_matrix1), "[_]"), "[", 2))
+
+genot_matrix1
+
+ACCase_known <- data.frame(matrix(c('genot_Ile1781.1', 'Ile1781.1', 373853, 'genot_Ile1781.2', 'Ile1781.2_Thr_C', 373854, 'genot_Trp1999.2', 'Trp1999.2_Leu_T', 374508,  'genot_Trp2027.3', 'Trp2027.3', 374593, 'genot_Ile2041.2', 'Ile2041.2', 374634, 'genot_Asp2078.2', 'Asp2078.2_Gly_G', 374745, 'genot_Gly2096.2', 'Gly2096.2_Ala_C', 374799), ncol = 3, byrow = TRUE))
+
+
+colnames(ACCase_known) <- c('Genotype', 'Simplified','coordinate')
+
+ACCase_known
+
+# Define samples
+samples <- colnames(genot_matrix1)
+samples
+IDs_temp <- sapply(strsplit(as.character(samples), "[-]"), "[", 2)
+label <- paste("cluster", IDs_temp, sep = "-")
+
+
+Proportion <- sapply(strsplit(as.character(samples), "[_]"), "[", 3)
+Reads <- sapply(strsplit(as.character(samples), "[_]"), "[", 2)
+Reads <- as.numeric(sapply(strsplit(as.character(Reads), "[.]"), "[", 1))
+
+samples <- data.frame(cbind(label, Proportion, Reads))
+samples
+# Extract mutations from genotype matrix
+genot_matrix_subset <- genot_matrix1[ rownames(genot_matrix1) %in% ACCase_known$coordinate , ]
+genot_matrix_subset
+rownames(genot_matrix_subset) <- ACCase_known$Simplified
+
+
+# Switch rows and columns and add names
+known_TSR_ACC <- cbind(samples, t(genot_matrix_subset))
+known_TSR_ACC <- as.data.frame(known_TSR_ACC)
+known_TSR_ACC
+
+# Since in this matrix all the individuals already haplotypes and therefore homozygous, we can eliminate one phase
+# Adjust to columns in dataset
+
+known_TSR_ACC$Ile1781.1 <- as.numeric(unlist(lapply(strsplit(as.character(known_TSR_ACC$Ile1781.1), "[/|]"), "[", 1)))
+
+known_TSR_ACC$Ile1781.2_Thr_C <- as.numeric(unlist(lapply(strsplit(as.character(known_TSR_ACC$Ile1781.2_Thr_C), "[/|]"), "[", 1)))
+
+known_TSR_ACC$Trp1999.2_Leu_T <- as.numeric(unlist(lapply(strsplit(as.character(known_TSR_ACC$Trp1999.2_Leu_T), "[/|]"), "[", 1)))
+
+known_TSR_ACC$Trp2027.3 <- as.numeric(unlist(lapply(strsplit(as.character(known_TSR_ACC$Trp2027.3), "[/|]"), "[", 1)))
+
+known_TSR_ACC$Ile2041.2 <- as.numeric(unlist(lapply(strsplit(as.character(known_TSR_ACC$Ile2041.2), "[/|]"), "[", 1)))
+
+known_TSR_ACC$Asp2078.2_Gly_G <- as.numeric(unlist(lapply(strsplit(as.character(known_TSR_ACC$Asp2078.2_Gly_G), "[/|]"), "[", 1)))
+
+known_TSR_ACC$Gly2096.2_Ala_C <- as.numeric(unlist(lapply(strsplit(as.character(known_TSR_ACC$Gly2096.2_Ala_C), "[/|]"), "[", 1)))
+
+
+known_TSR_ACC
+```
+
+```{r}
+unique(known_TSR_ACC$Ile1781.1)
+unique(known_TSR_ACC$Ile1781.2_Thr_C)
+unique(known_TSR_ACC$Trp1999.2_Leu_T)
+unique(known_TSR_ACC$Ile2041.2)
+unique(known_TSR_ACC$Asp2078.2_Gly_G)
+unique(known_TSR_ACC$Trp2027.3)
+unique(known_TSR_ACC$Gly2096.2_Ala_C)
+
+# The following cluster got NA -> manual check identified a C at this position
+# known_TSR_ACC$Ile2041.2[ which(known_TSR_ACC$label == 'cluster-20_37_0.00462616')  ] <- 2
+
+df3 <- data.frame(matrix(ncol = 7, nrow = 290))
+x3 <- c("Ile1781.1_Leu_T","Ile1781.1_Leu_C","Ile1781.1_Val_G", "Trp2027.3_Cys_T", "Trp2027.3_Cys_C", "Ile2041.2_Asn_A", "Ile2041.2_Thr_C")
+colnames(df3) <- x3
+df3
+
+all_phases <- cbind(known_TSR_ACC, df3)
+all_phases
+
+```
+# Split the multiallelic sites
+```{r}
+all_phases1 <- all_phases
+
+all_phases1 <- mutate(all_phases1, Ile1781.1_Leu_T = ifelse(Ile1781.1 == 2,1,0))
+all_phases1 <- mutate(all_phases1, Ile1781.1_Leu_C = ifelse(Ile1781.1 == 3,1,0))
+all_phases1 <- mutate(all_phases1, Ile1781.1_Val_G = ifelse(Ile1781.1 == 1,1,0))
+all_phases1 <- mutate(all_phases1, Trp2027.3_Cys_T = ifelse(Trp2027.3 == 1,1,0))
+all_phases1 <- mutate(all_phases1, Trp2027.3_Cys_C = ifelse(Trp2027.3 == 2,1,0))
+all_phases1 <- mutate(all_phases1, Ile2041.2_Asn_A = ifelse(Ile2041.2 == 1,1,0))
+all_phases1 <- mutate(all_phases1, Ile2041.2_Thr_C = ifelse(Ile2041.2 == 2,1,0))
+
+
+
+# add wildtype column
+all_phases1$wildtype <- as.logical(all_phases1$Ile1781.1_Leu_T == 1 | all_phases1$Ile1781.1_Leu_C == 1 | all_phases1$Ile1781.1_Val_G == 1| all_phases1$Ile1781.2_Thr_C ==1 | all_phases1$Trp1999.2_Leu_T== 1| all_phases1$Trp2027.3_Cys_T == 1| all_phases1$Trp2027.3_Cys_C == 1 | all_phases1$Ile2041.2_Asn_A == 1| all_phases1$Ile2041.2_Thr_C == 1| all_phases1$Asp2078.2_Gly_G == 1 | all_phases1$Gly2096.2_Ala_C == 1)
+
+all_phases1 <- mutate(all_phases1, wildtype = ifelse(wildtype == "FALSE",1,0))
+
+all_phases1
+
+```
+
+# Metadatatable
+```{r}
+metadata <- all_phases1[ ,c(1,2,3,11:13,5,6,14,15,16,17,9,10,18)]
+metadata
+metadata_POPART_pools <- metadata
+write.table(metadata_POPART_pools, file= "metadata_POPART_pools",row.names = FALSE, quote = FALSE)
+```
+
+# Transform numbers into mutation names
+```{r}
+metadata1 <- metadata
+
+metadata1 <- mutate(metadata1, Ile1781.1_Leu_T = ifelse(Ile1781.1_Leu_T == 1,"Ile1781.1_Leu_T",NA))
+metadata1 <- mutate(metadata1, Ile1781.1_Leu_C = ifelse(Ile1781.1_Leu_C == 1,"Ile1781.1_Leu_C",NA))
+metadata1 <- mutate(metadata1, Ile1781.1_Val_G = ifelse(Ile1781.1_Val_G == 1,"Ile1781.1_Val_G",NA))
+metadata1 <- mutate(metadata1, Ile1781.2_Thr_C = ifelse(Ile1781.2_Thr_C == 1,"Ile1781.2_Thr_C",NA))
+metadata1 <- mutate(metadata1, Trp1999.2_Leu_T = ifelse(Trp1999.2_Leu_T == 1,"Trp1999.2_Leu_T",NA))
+metadata1 <- mutate(metadata1, Trp2027.3_Cys_T = ifelse(Trp2027.3_Cys_T == 1,"Trp2027.3_Cys_T",NA))
+metadata1 <- mutate(metadata1, Trp2027.3_Cys_C = ifelse(Trp2027.3_Cys_C == 1,"Trp2027.3_Cys_C",NA))
+metadata1 <- mutate(metadata1, Ile2041.2_Asn_A = ifelse(Ile2041.2_Asn_A == 1,"Ile2041.2_Asn_A",NA))
+metadata1 <- mutate(metadata1, Ile2041.2_Thr_C = ifelse(Ile2041.2_Thr_C == 1,"Ile2041.2_Thr_C",NA))
+metadata1 <- mutate(metadata1, Asp2078.2_Gly_G = ifelse(Asp2078.2_Gly_G == 1,"Asp2078.2_Gly_G",NA))
+metadata1 <- mutate(metadata1, Gly2096.2_Ala_C = ifelse(Gly2096.2_Ala_C == 1,"Gly2096.2_Ala_C",NA))
+metadata1 <- mutate(metadata1, wildtype = ifelse(wildtype == 1,"wildtype",NA))
+
+metadata1
+
+library(tidyr)
+
+metadata2 <- unite(metadata1, mut, Ile1781.1_Leu_T, Ile1781.1_Leu_C, Ile1781.1_Val_G, Ile1781.2_Thr_C, Trp1999.2_Leu_T, Trp2027.3_Cys_T, Trp2027.3_Cys_C, Ile2041.2_Asn_A, Ile2041.2_Thr_C , Asp2078.2_Gly_G, Gly2096.2_Ala_C, wildtype , sep = "_", remove = FALSE, na.rm = TRUE)
+metadata2
+
+unique(metadata2$mut)
+metadata2
+metadata_pool <- metadata2[ ,c(1,2,3,4)]
+metadata_pool <- cbind(sample = rownames(metadata2),metadata_pool)
+metadata_pool
+metadata_pool$populations <- sapply(strsplit(as.character(metadata_pool$sample), "[.]"), "[", 1)
+metadata_pool
+TSR_ACC_pools <- metadata_pool
+write.table(TSR_ACC_pools, file= "TSR_ACC_pools",row.names = FALSE, quote = FALSE)
+TSR_ACC_pools <- read_table2("TSR_ACC_pools")
+```
+
+# Combine both datasets
+```{r}
+metadata_POPART_individuals <- read_table2("metadata_POPART_individuals")
+
+library(plyr)
+metadata_POPART_individuals$Ile2041.2_Thr_C <- 0
+metadata_POPART_individuals$Gly2096.2_Ala_C <- 0
+metadata_POPART_pools$names <- rownames(metadata_POPART_pools)
+metadata_POPART_pools$sample <- metadata_POPART_pools$label
+metadata_POPART_pools$populations <- sapply(strsplit(as.character(metadata_POPART_pools$names), "[.]"), "[", 1)
+metadata_POPART_all <- rbind.fill(metadata_POPART_individuals,metadata_POPART_pools)
+head(metadata_POPART_all)
+tail(metadata_POPART_all)
+
+metadata_POPART_pools
+
+library(readr)
+TSR_ACC_individuals <- read_table2("TSR_ACC_individuals")
+TSR_ACC_individuals$Type <- 'Individual'
+TSR_ACC_individuals
+
+TSR_ACC_pools$Type <- 'Pool'
+
+
+library(plyr)
+TSR_ACC_all <- rbind.fill(TSR_ACC_individuals, TSR_ACC_pools)
+head(TSR_ACC_all)
+tail(TSR_ACC_all)
+write.table(TSR_ACC_all, file= "TSR_ACC_all",row.names = FALSE, quote = FALSE)
+```
+
+
+
+```{r}
+unique(TSR_ACC_pools$populations)
+pops_list <- unique(TSR_ACC_pools$populations)
+pops_list
+```
+
+
+### Haplotype Table
+
+# Multiple alignment contains both (representative individuals and corresponding pool)
+
+# Count haplotypes of individuals
+```{r}
+library(haplotypes)
+
+# Read all multiple alignment files
+x_files <- list.files("input_files_Rscripts/", "*_multiple_alignment.fasta")
+# Extract pop names
+x_pops <- sapply(strsplit(x_files, "[_]"), "[", 1)
+
+# Subset for only those for which we sequenced pools
+x_files <- x_files[ x_pops %in% pops_list ]
+x_pops <- x_pops[ x_pops %in% pops_list ]
+
+# Declare output data frame
+x_summary_haps_in_indiv <- data.frame(Population=NA, Number_of_haplotypes=NA)
+
+for(i in 1:length(x_files)){
+  x_file_tmp <- read.fas(file=paste("input_files_Rscripts/", x_files[i], sep =""))
+                         
+  x_hap <- haplotype(x_file_tmp,indels="5th")          
+              
+  x_summary_temp <- data.frame(Population=x_pops[i], Number_of_haplotypes=length(x_hap@freq))
+            
+  x_summary_haps_in_indiv <- rbind(x_summary_haps_in_indiv, x_summary_temp)
+  
+  print(x_pops[i])
+}
+  
+x_summary_haps_in_indiv <- x_summary_haps_in_indiv[-1,]
+x_summary_haps_in_indiv
+
+
+##haplotype_list <- hap@haplist
+##haplotype_list
+```
+
+
+# Table BASF individuals vs pools
+```{r}
+
+library(haplotypes)
+
+
+PATH <- "input_files_Rscripts/"
+
+
+# Declare output data frame
+table_pools_vs_indiv <- data.frame(Population=NA, Number_haps_pool=NA, Number_haps_indiv=NA, Number_pairs=NA, TSR_pairs=NA, Additional_TSRs=NA, Proportion_pools=NA)
+
+
+for(index in 1:length(pops_list)){
+
+  POPULATION <- pops_list[index]
+
+  # Declare temporal dataframe
+  table_TMP <- data.frame(Population= POPULATION, Number_haps_pool=NA, Number_haps_indiv=NA, Number_pairs=NA, TSR_pairs=NA, Additional_TSRs=NA, Proportion_pools=NA)
+
+  # Read multiple alignment
+  z<-read.fas(paste(PATH, POPULATION, "_multiple_alignment_pool_indv.fasta", sep =""))
+  
+  hap_pool<-haplotype(z,indels="5th")
+
+  haplotype_list_pool <- hap_pool@haplist
+
+##hap_pool@haplist
+##hap_pool@hapind
+##hap_pool@uniquehapind
+##hap_pool@sequence
+##hap_pool@d
+
+  haps_input <- as.data.frame(haplotype_list_pool)
+  haps_output <- data.frame(sample=NA, haplotype=NA)
+
+  for(i in 1:hap_pool@nhap){
+    j <- i*2 -1
+    haps_output[j:(j+1), ] <- haps_input[,i]
+    haps_output[j:(j+1) , 2] <-  colnames(haps_input)[i]
+  } 
+
+  haps_output <- haps_output[!duplicated(haps_output$sample), ]
+
+  haps_output
+
+# Haplotypes with individuals
+  haps_output$sample[grep(pattern = '.h', x = haps_output$sample )]
+
+  table_TMP$Number_haps_indiv <-  length(haps_output$sample[grep(pattern = '.h', x = haps_output$sample )])
+
+# Haplotypes pool
+  haps_output$sample[grep(pattern = 'cluster', x = haps_output$sample )]
+
+  table_TMP$Number_haps_pool <-  length(haps_output$sample[grep(pattern = 'cluster', x = haps_output$sample )])
+
+# unique haplotypes
+  haps_output$haplotype[ !(duplicated(haps_output$haplotype) | duplicated(haps_output$haplotype, fromLast=TRUE))]
+
+  haps_output$sample[ !(duplicated(haps_output$haplotype) | duplicated(haps_output$haplotype, fromLast=TRUE))]
+
+  length(haps_output$haplotype[ !(duplicated(haps_output$haplotype) | duplicated(haps_output$haplotype, fromLast=TRUE))])
+
+# haplotype pairs
+  haps_output$haplotype[ (duplicated(haps_output$haplotype) | duplicated(haps_output$haplotype, fromLast=TRUE))]
+
+  table_TMP$Number_pairs <- length(haps_output$haplotype[ (duplicated(haps_output$haplotype) | duplicated(haps_output$haplotype, fromLast=TRUE))])/2
+
+  # incorporate TSR metadata
+  metadata_TSR <- subset(TSR_ACC_all, populations == POPULATION)
+  colnames(metadata_TSR)[5] <- "name"
+  colnames(metadata_TSR)[1] <- "sample"
+  pop_hap_TSR <- merge(haps_output,metadata_TSR, by="sample")
+  pop_hap_TSR
+
+  # Individual dataframe
+  pop_hap_TSR_individuals <- pop_hap_TSR[grep(pattern = '.h',pop_hap_TSR$sample),]
+  pop_hap_TSR_individuals$Type <- 'Individual' 
+
+  # Pool dataframe
+  pop_hap_TSR_pool <- pop_hap_TSR[grep(pattern = 'cluster',pop_hap_TSR$sample),]
+  pop_hap_TSR_pool$Type <- 'Pool' 
+
+  # Merge both dataframes
+  hap_TSR <- rbind(pop_hap_TSR_individuals, pop_hap_TSR_pool)
+  hap_onlyTSR <- subset(hap_TSR, mut != "wildtype") 
+
+  hap_onlyTSR_counts <- count(hap_onlyTSR, c("mut", "haplotype"))
+
+  # Same re-discovered TSRs
+  table_TMP$TSR_pairs <- length(which(hap_onlyTSR_counts$freq ==2 ))
+
+  # Additional TSRs in pools
+  table_TMP$Additional_TSRs <- length(which(hap_onlyTSR_counts$freq ==1 ))
+
+  ## Now, verify that all "Additional TSRs" come from pools
+  # Extract haplotypes that only have 1 representative, meaning they are unique
+  new_TSR_haps <- hap_onlyTSR_counts[ which(hap_onlyTSR_counts$freq ==1), 2 ]
+  new_TSR_haps
+  # Extract the "Type"  for these haplotype
+  new_TSR_haps_type <- hap_onlyTSR[ which(hap_onlyTSR$haplotype %in% new_TSR_haps), 5 ]
+
+  table_TMP$Proportion_pools <- length(which(new_TSR_haps_type == 'Pool')) / length(new_TSR_haps_type)
+ 
+  # Concatenate TMP table with final one
+  table_pools_vs_indiv <- rbind(table_pools_vs_indiv,table_TMP)
+  
+}
+
+# Remove ugly first row
+table_pools_vs_indiv <- table_pools_vs_indiv[-1, ]
+
+table_pools_vs_indiv
+
+```
+
+```{r}
+write.table(table_pools_vs_indiv, file= "Table1_pools_vs_indiv.txt",row.names = FALSE, quote = FALSE)
+```
+
+## Plots histogramm and correlation - indv. vs pool haplotypes
+
+# Haplotype frequencies of individuals
+```{r}
+library(haplotypes)
+
+
+ALL_haps_counts <- data.frame(individual=NA, freq=NA, Frequency=NA, Population=NA)
+
+for(p in 1: length(x_pops)){
+  
+  #Read alignment file
+  POP_msa <- read.fas(file=paste("input_files_Rscripts/", x_files[p], sep = ""))
+  POP_haps <- haplotype(POP_msa,indels="5th")
+  POP_haps
+  
+  # Collect haplotypes info
+  test <- POP_haps@haplist
+  test
+  test1 <- data.frame(t(plyr::ldply(test, rbind)))
+  colnames(test1) <- test1[1,]
+  test1 <- test1[-1,]
+
+  #Convert ugly list to a data frame
+  dummy <- data.frame(individual=NA, haplotype=NA)
+  for(i in 1:length(test1)){
+    dummy_TMP <- data.frame(individual=test1[i], haplotype=colnames(test1)[i])
+    dummy_TMP <- dummy_TMP[which(!is.na(dummy_TMP[,1])),]
+    colnames(dummy_TMP) <- c("individual", "haplotype")
+    dummy <- rbind(dummy, dummy_TMP)
+  }
+  dummy <- dummy[-1,]
+
+  #Add frequencies to each haplotype
+  haps_counts <- count(dummy, c("haplotype"))
+  haps_counts$Frequency <- haps_counts$freq / sum(haps_counts$freq)
+
+  #Merge arbitrary haplotypes with individual haplotypes that have a name form the pops
+  haps_counts <- merge(dummy, haps_counts, by = "haplotype")
+  haps_counts <- haps_counts[ ,-1]
+
+  #Add population name
+  haps_counts$Population <- x_pops[p]
+  
+  #bind with previous
+  ALL_haps_counts <- rbind(ALL_haps_counts, haps_counts)
+}
+
+ALL_haps_counts <- ALL_haps_counts[ -1,]
+ALL_haps_counts
+
+```
+
+## proper pairs of individuals for correlations
+```{r}
+# Extract from all pool + indv. dataframes the paired haplotypes and put them in one big dataframe
+
+library(haplotypes)
+
+
+PATH <- "input_files_Rscripts/"
+
+
+# Declare output data frame
+table_pairs <- data.frame(sample=NA, haplotype=NA, Paired=NA, Population=NA, Set=NA, Freq_pools=NA)
+
+
+for(index in 1:length(pops_list)){
+
+  POPULATION <- pops_list[index]
+
+  # Declare temporal dataframe
+  table_pairs_TMP <- data.frame(Population= POPULATION, sample=NA, haplotype=NA)
+
+  # Read multiple alignment
+  z<-read.fas(paste(PATH, POPULATION, "_multiple_alignment_pool_indv.fasta", sep =""))
+  hap_pool<-haplotype(z,indels="5th")
+  haplotype_list_pool <- hap_pool@haplist
+  haps_input <- as.data.frame(haplotype_list_pool)
+  haps_output <- data.frame(sample=NA, haplotype=NA)
+
+  for(i in 1:hap_pool@nhap){
+    j <- i*2 -1
+    haps_output[j:(j+1), ] <- haps_input[,i]
+    haps_output[j:(j+1) , 2] <-  colnames(haps_input)[i]
+  } 
+
+  haps_output <- haps_output[!duplicated(haps_output$sample), ]
+
+  haps_output
+  
+  #Determine whether they are unique or paired haplotypes
+  PAIRED <- unique(haps_output$haplotype[ (duplicated(haps_output$haplotype) | duplicated(haps_output$haplotype, fromLast=TRUE))])
+  haps_output$Paired <- haps_output$haplotype %in% PAIRED
+  haps_output$Paired[which(haps_output$Paired)] <- 'Paired'
+  haps_output$Paired[which(haps_output$Paired==FALSE)] <- 'Unique'
+  
+  # Add population
+  haps_output$Population <- POPULATION
+  
+  #Add column for Indiv and Pools
+  haps_output$Set <- NA
+  haps_output$Set[grep(pattern = "cluster", x = haps_output$sample)] <- 'Pool' 
+  haps_output$Set[which(is.na(haps_output$Set))] <- 'Individual'   
+  
+  # split frequency info
+  haps_output$Freq_pools <- as.numeric(sapply(strsplit(as.character(haps_output$sample), "[_]"), "[", 3))
+  
+  # Bind to previous in the loop
+  table_pairs <- rbind(table_pairs, haps_output)
+  
+}
+table_pairs <- table_pairs[-1,]
+
+# Merge with Freq info from individuals
+colnames(ALL_haps_counts)[1] <- 'sample'
+table_pairs2 <- merge(table_pairs, ALL_haps_counts, by = "sample", all.x=TRUE)
+
+# Complement single column for Frequencies
+table_pairs2$Frequency[which(is.na(table_pairs2$Frequency))] <- table_pairs2$Freq_pools[which(is.na(table_pairs2$Frequency))]
+
+# Eliminate unnecessary columns
+colnames(table_pairs2)[7] <- "Haplotype_count"
+table_pairs2 <- table_pairs2[,-c(6,9)]
+
+#################
+#### Convert to format for correlation of pairs
+
+# Create ID column for pairs
+table_pairs2$ID_pair <- paste(table_pairs2$Population.x, table_pairs2$haplotype, sep='_')
+
+# Extract samples that are paired
+pairs_ofinterest <- subset(table_pairs2, Paired == 'Paired')
+for_corr_indiv <- subset(pairs_ofinterest, Set == 'Individual')
+for_corr_pool <- subset(pairs_ofinterest, Set == 'Pool')
+
+for_corr_both <- merge(for_corr_indiv, for_corr_pool, by = 'ID_pair')
+  
+#plot(for_corr_both$Frequency.x, for_corr_both$Frequency.y)
+  
+```
+
+
+
+## Histogram : Individual frequencies x freq (colour:Unique/Pair)
+```{r}
+# Subset big dataframe for only individuals
+table_pairs2_indv <- subset(table_pairs2, Set == 'Individual')
+table_pairs2_indv
+
+hist_indiv_haps_1 <- ggplot(table_pairs2_indv, aes(x=Haplotype_count, fill=Paired)) + geom_histogram(color="#4d4d4d", alpha=0.8, binwidth=1) + scale_fill_manual(name="Indv. haplotype", values = c("#006666","#737373")) + theme_light() + ylab("Count") + xlab("Haplotype count per population")  + theme(text=element_text(size=17)) + coord_cartesian(ylim=c(0,100), xlim=c(0,20))
+hist_indiv_haps_1
+
+pdf(file="Histogram_Individuals_Pools.pdf", width = 7.5, height = 4)
+hist_indiv_haps_1
+dev.off()
+
+```
+
+# Counts of unique haplotypes for paper text
+```{r}
+
+table_pairs2
+table_pairs2_indv_unique <- subset(table_pairs2_indv, Paired == 'Unique')
+table_pairs2_indv_unique
+
+table_pairs_indv_1 <- subset(table_pairs2_indv, Haplotype_count == 1)
+table_pairs_indv_1
+
+subset(table_pairs_indv_1, Paired=='Unique')
+
+table_pairs2_indv_2_3 <- subset(table_pairs2_indv, Haplotype_count == 2 | Haplotype_count == 3)
+table_pairs2_indv_2_3
+
+```
+
+
+## Correlation plot
+```{r}
+library(ggpubr)
+
+for_corr_both
+
+corr_plot <- ggplot(for_corr_both, aes(x=Frequency.x, y=Frequency.y, color="black")) +  
+  geom_point(size=3, fill="#006666", alpha=0.8, shape=21, color="#4d4d4d")+ geom_smooth(method=lm, se=FALSE)+ ylab("Haplotype frequency individual") + xlab("Haplotype frequency pool") + scale_color_manual(values="#4d4d4d95") + theme_light() + theme(text=element_text(size=17)) + theme(strip.text.x=element_text(size=17)) + stat_cor(method = "pearson", label.y = 0.35, color="black",cex = 5) + theme(legend.position = "none")
+
+corr_plot
+
+pdf(file="Correlation_Haplotype_frequencies_Individuals_Pools.pdf", width = 5, height = 4)
+corr_plot
+dev.off() 
+
+```
+
+
+# Single tree BE01585
+```{r}
+library(readr)
+TSR_ACC_all <- read_table2("TSR_ACC_all")
+
+library(ggplot2)
+library(phyloseq)
+library(scales)
+library(ggtree)
+library(treeio)
+library(dplyr)
+library(tibble)
+
+PATH <- "input_files_Rscripts/"
+  
+POPULATION <- "BE01585"
+
+# Read tree object
+tree <- read.newick(paste(PATH, POPULATION, "_multiple_alignment_pool_indv.fasta.raxml.supportFBP", sep =""), node.label="support")
+tree
+
+# Condition to remove low supported end tip labels
+is.na(tree@data[["support"]]) <- tree@data[["support"]] < 70
+POP_tree <- subset(TSR_ACC_all, populations == POPULATION)
+
+
+x <- as_tibble(tree)
+x
+# Add Metadata to the tree
+
+y <- full_join(x, POP_tree, by = 'label')
+y
+
+# transform to treedata
+as.treedata(y)
+
+# Plot first part of the tree
+p1 <- ggtree(tree) + geom_treescale(x=0.006, y=0, fontsize=5.5, linesize=1, offset=1) 
+p1
+
+myColors <- c("#bd0026", "#ff8080", "#800026", "#fd8d3c", "#002db3", "#e6b800", "#a31aff","#00b30099", "#8c8c8c", "#000000")
+names(myColors) <- as.factor(c("Ile1781.1_Leu_T", "Ile1781.1_Leu_C", "Ile1781.1_Val_G", "Ile1781.2_Thr_C" , "Ile2041.2_Asn_A","Asp2078.2_Gly_G", "Gly2096.2_Ala_C", "wildtype", "Individual", "Pool"))
+
+# Plot second part of the tree
+p2 <- p1 %<+% y + geom_tiplab(aes(label=Type, color=Type),size=5, offset=0.00015, hjust=0, na.rm=TRUE)  + geom_tippoint(aes(color= mut),size=5, alpha=0.9,na.rm=TRUE) +  scale_colour_manual(name="TSR mutations", values = myColors) + xlim(0,0.007) + geom_nodelab(aes(label = support), hjust=1.9, vjust=-0.3, colour= "#737373", size=4.5) + theme(text = element_text(size = 20)) + theme(legend.position = c(0.65, 0.15))
+p2
+
+### ONLY FOR LEGEND without letters in the colour points!
+##p2 <- p1 %<+% y + geom_tiplab(aes(label=Type),size=6, offset=0.00015, hjust=0, na.rm=TRUE)  + geom_tippoint(aes(color= mut),size=5, alpha=0.9,na.rm=TRUE) +  scale_colour_manual(name="TSR mutations", values = myColors) + xlim(0,0.0085) + geom_nodelab(aes(label = support), hjust=1.9, vjust=-0.3, colour= "#737373", size=4.5) + theme(text = element_text(size = 20)) + theme(legend.position = c(0.11, 0.85))
+##p2
+  
+
+# Rotate clades
+
+p3 <- rotate(p2, 74)
+p3 <- rotate(p3, 67)
+p3 <- rotate(p3, 61)
+
+p3 <- rotate(p3, 85)
+p4 <- rotate(p3, 69)
+p5 <- rotate(p4, 95)
+p6 <- rotate(p5, 55)
+
+p6
+
+
+png(file = "ACC_BE01585_pool_individual_trees.png",  width = 350, height = 300, units='mm', res = 600)
+print(p6)
+dev.off()
+
+
+pdf(file = "ACC_BE01585_pool_individual_trees.pdf", width = 14, height = 12)
+print(p6)
+dev.off()
+
+```
+
+
+# Metadata file for network
+```{r}
+
+POP <- subset(metadata_POPART_all, populations == "BE01585")
+POP
+POP$x <- paste(POP$sample,POP$Ile1781.1_Leu_T, POP$Ile1781.1_Leu_C, POP$Ile1781.1_Val_G, POP$Ile1781.2_Thr_C, POP$Ile2041.2_Asn_A, POP$Asp2078.2_Gly_G, POP$Gly2096.2_Ala_C, POP$wildtype, sep=",")
+
+
+POP
+write.table(POP$x, file = "ACC_POPART_BE01585_nexus_meta.txt", row.names = FALSE, col.names = ",Ile1781.1_Leu_T,Ile1781.1_Leu_C,Ile1781.1_Val_G,Ile1781.2_Thr_C,Ile2041.2_Asn_A,Asp2078.2_Gly_G,Gly2096.2_Ala_C,wildtype", quote = FALSE)
+## Attention, file contains more individuals than in the dataset. Delete them!
+```
+
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```

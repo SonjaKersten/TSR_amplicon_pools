@@ -1,0 +1,434 @@
+---
+title: "Rscript_Figure3_pbaa_SNP_calling_and_correlations"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+######################### Haplotype frequency analysis ######################
+
+## TSR Analysis based on haplotype VCF
+
+```{r}
+library(vcfR)
+library(dplyr)
+
+# Read vcf file
+vcf <- read.vcfR('input_files_Rscripts/Figure3_pools.ACCase_001213F.GVCF.ann.vcf')
+
+vcf_chrom <- create.chromR(name='001213F', vcf=vcf)
+genot_matrix <- as.data.frame(extract.gt(vcf_chrom, mask=FALSE))
+dim(genot_matrix)
+
+genot_matrix1 <- genot_matrix[which(rownames(genot_matrix) == "001213F_373853" | rownames(genot_matrix) == "001213F_373854" | rownames(genot_matrix) == "001213F_373855" | rownames(genot_matrix) == "001213F_374507" | rownames(genot_matrix) == "001213F_374508" | rownames(genot_matrix) == "001213F_374509" | rownames(genot_matrix) == "001213F_374591" | rownames(genot_matrix) == "001213F_374592" | rownames(genot_matrix) =="001213F_374593" | rownames(genot_matrix) =="001213F_374633" | rownames(genot_matrix) =="001213F_374634" | rownames(genot_matrix) =="001213F_374635" |  rownames(genot_matrix) == "001213F_374744"| rownames(genot_matrix) == "001213F_374745"| rownames(genot_matrix) == "001213F_374746"| rownames(genot_matrix) == "001213F_374774" | rownames(genot_matrix) == "001213F_374775" | rownames(genot_matrix) == "001213F_374776" | rownames(genot_matrix) == "001213F_374798" | rownames(genot_matrix) == "001213F_374799" | rownames(genot_matrix) == "001213F_374800"), ,drop=FALSE]
+
+rownames(genot_matrix1) <- as.numeric(sapply(strsplit(rownames(genot_matrix1), "[_]"), "[", 2))
+
+genot_matrix1
+
+# Known mutations
+ACCase_known <- data.frame(matrix(c('genot_Ile1781.1', 'Ile1781.1', 373853, 'genot_Ile1781.2', 'Ile1781.2_Thr_C', 373854, 'genot_Trp1999.2', 'Trp1999.2', 374508, 'genot_Trp2027.2', 'Trp2027.2_Leu_T', 374592, 'genot_Trp2027.3', 'Trp2027.3', 374593, 'genot_Ile2041.2', 'Ile2041.2', 374634, 'genot_Asp2078.2', 'Asp2078.2_Gly_G', 374745, 'genot_Gly2096.2', 'Gly2096.2_Ala_C', 374799 ), ncol = 3, byrow = TRUE))
+colnames(ACCase_known) <- c('Genotype', 'Simplified','coordinate')
+
+ACCase_known
+
+# Define samples
+samples <- colnames(genot_matrix1)
+samples
+IDs_1 <- sapply(strsplit(as.character(samples), "[.]"), "[", 1)
+IDs_2 <- sapply(strsplit(as.character(samples), "[.]"), "[" ,2)
+IDs <- paste(IDs_1,IDs_2, sep=".")
+IDs
+
+
+Proportion <- sapply(strsplit(as.character(samples), "[_]"), "[", 4)
+Reads <- sapply(strsplit(as.character(samples), "[_]"), "[", 5)
+Reads <- as.numeric(sapply(strsplit(as.character(Reads), "[.]"), "[", 1))
+
+
+samples <- data.frame(cbind(IDs, Proportion, Reads))
+samples
+# Extrat mutations from genotype matrix
+genot_matrix_subset <- genot_matrix1[ rownames(genot_matrix1) %in% ACCase_known$coordinate , ]
+genot_matrix_subset
+rownames(genot_matrix_subset) <- ACCase_known$Simplified
+
+
+# Switch rows and columns and add names
+known_TSR_ACC <- cbind(samples, t(genot_matrix_subset))
+colnames(known_TSR_ACC) [1] <- "sample"
+known_TSR_ACC <- as.data.frame(known_TSR_ACC)
+known_TSR_ACC
+
+# Since in this matrix all the individuals already haplotypes and therefore homozygous, we can eliminate one phase
+
+known_TSR_ACC$Ile1781.1 <- as.numeric(unlist(lapply(strsplit(as.character(known_TSR_ACC$Ile1781.1), "[/|]"), "[", 1)))
+known_TSR_ACC$Ile1781.2_Thr_C <- as.numeric(unlist(lapply(strsplit(as.character(known_TSR_ACC$Ile1781.2_Thr_C), "[/|]"), "[", 1)))
+known_TSR_ACC$Trp1999.2 <- as.numeric(unlist(lapply(strsplit(as.character(known_TSR_ACC$Trp1999.2), "[/|]"), "[", 1)))
+known_TSR_ACC$Trp2027.2_Leu_T <- as.numeric(unlist(lapply(strsplit(as.character(known_TSR_ACC$Trp2027.2_Leu_T), "[/|]"), "[", 1)))
+known_TSR_ACC$Trp2027.3 <- as.numeric(unlist(lapply(strsplit(as.character(known_TSR_ACC$Trp2027.3), "[/|]"), "[", 1)))
+known_TSR_ACC$Ile2041.2 <- as.numeric(unlist(lapply(strsplit(as.character(known_TSR_ACC$Ile2041.2), "[/|]"), "[", 1)))
+known_TSR_ACC$Asp2078.2_Gly_G <- as.numeric(unlist(lapply(strsplit(as.character(known_TSR_ACC$Asp2078.2_Gly_G), "[/|]"), "[", 1)))
+known_TSR_ACC$Gly2096.2_Ala_C <- as.numeric(unlist(lapply(strsplit(as.character(known_TSR_ACC$Gly2096.2_Ala_C), "[/|]"), "[", 1)))
+
+known_TSR_ACC
+```
+
+```{r}
+unique(known_TSR_ACC$Ile1781.1)
+# IGV check to identify TSRs that have to be corrected manually
+# Sample_IDs: 26676_F123_c6_0.0607777_322 has NA and is a G
+#             27967_F284_c13_0.00981873_52 has NA and is a T
+# Correction:
+known_TSR_ACC$Ile1781.1[691] <- 3
+known_TSR_ACC$Ile1781.1[1421] <- 1
+
+unique(known_TSR_ACC$Ile1781.1)
+unique(known_TSR_ACC$Ile1781.2_Thr_C)
+unique(known_TSR_ACC$Trp1999.2)
+unique(known_TSR_ACC$Trp2027.2_Leu_T)
+unique(known_TSR_ACC$Ile2041.2)
+unique(known_TSR_ACC$Asp2078.2_Gly_G)
+unique(known_TSR_ACC$Trp2027.3)
+unique(known_TSR_ACC$Gly2096.2_Ala_C)
+
+
+df3 <- data.frame(matrix(ncol = 8, nrow = 1566))
+x3 <- c("Ile1781.1_Leu_T","Ile1781.1_Leu_C", "Ile1781.1_Val_G","Trp1999.2_Leu_T", "Trp1999.2_Ser_C", "Trp2027.3_Cys_T", "Trp2027.3_Cys_C", "Ile2041.2_Asn_A")
+colnames(df3) <- x3
+df3
+
+all_phases <- cbind(known_TSR_ACC, df3)
+all_phases
+```
+# Split the multiallelic sites
+```{r}
+all_phases1 <- all_phases
+
+all_phases1 <- mutate(all_phases1, Ile1781.1_Leu_T = ifelse(Ile1781.1 == 1,1,0))
+all_phases1 <- mutate(all_phases1, Ile1781.1_Leu_C = ifelse(Ile1781.1 == 2,1,0))
+all_phases1 <- mutate(all_phases1, Ile1781.1_Val_G = ifelse(Ile1781.1 == 3,1,0))
+all_phases1 <- mutate(all_phases1, Trp1999.2_Leu_T = ifelse(Trp1999.2 == 1,1,0))
+all_phases1 <- mutate(all_phases1, Trp1999.2_Ser_C = ifelse(Trp1999.2 == 2,1,0))
+all_phases1 <- mutate(all_phases1, Trp2027.3_Cys_T = ifelse(Trp2027.3 == 1,1,0))
+all_phases1 <- mutate(all_phases1, Trp2027.3_Cys_C = ifelse(Trp2027.3 == 2,1,0))
+all_phases1 <- mutate(all_phases1, Ile2041.2_Asn_A = ifelse(Ile2041.2 == 1,1,0))
+
+# add wildtype column
+all_phases1$wildtype <- as.logical(all_phases1$Ile1781.1_Leu_T == 1 | all_phases1$Ile1781.1_Leu_C == 1 | all_phases1$Ile1781.1_Val_G ==1 | all_phases1$Trp2027.2_Leu_T== 1| all_phases1$Trp2027.3_Cys_T == 1| all_phases1$Trp2027.3_Cys_C == 1| all_phases1$Ile1781.2_Thr_C == 1 | all_phases1$Trp1999.2_Leu_T == 1 | all_phases1$Trp1999.2_Ser_C == 1 |all_phases1$Ile2041.2_Asn_A == 1 | all_phases1$Asp2078.2_Gly_G == 1 | all_phases1$Gly2096.2_Ala_C == 1)
+
+all_phases1 <- mutate(all_phases1, wildtype = ifelse(wildtype == "FALSE",1,0))
+
+all_phases1
+
+```
+
+# Metadatatable
+```{r}
+metadata <- all_phases1[ ,c(1,3,12,13,14,5,15,16,7,17,18,19,10,11,20)]
+metadata
+```
+
+# Transform numbers into mutation names
+```{r}
+metadata1 <- metadata
+
+metadata1 <- mutate(metadata1, Ile1781.1_Leu_T = ifelse(Ile1781.1_Leu_T == 1,"Ile1781.1_Leu_T",NA))
+metadata1 <- mutate(metadata1, Ile1781.1_Leu_C = ifelse(Ile1781.1_Leu_C == 1,"Ile1781.1_Leu_C",NA))
+metadata1 <- mutate(metadata1, Ile1781.1_Val_G = ifelse(Ile1781.1_Val_G == 1,"Ile1781.1_Val_G",NA))
+metadata1 <- mutate(metadata1, Ile1781.2_Thr_C = ifelse(Ile1781.2_Thr_C == 1,"Ile1781.2_Thr_C",NA))
+metadata1 <- mutate(metadata1, Trp1999.2_Leu_T = ifelse(Trp1999.2_Leu_T == 1,"Trp1999.2_Leu_T",NA))
+metadata1 <- mutate(metadata1, Trp1999.2_Ser_C = ifelse(Trp1999.2_Ser_C == 1,"Trp1999.2_Ser_C",NA))
+metadata1 <- mutate(metadata1, Trp2027.2_Leu_T = ifelse(Trp2027.2_Leu_T == 1,"Trp2027.2_Leu_T",NA))
+metadata1 <- mutate(metadata1, Trp2027.3_Cys_T = ifelse(Trp2027.3_Cys_T == 1,"Trp2027.3_Cys_T",NA))
+metadata1 <- mutate(metadata1, Trp2027.3_Cys_C = ifelse(Trp2027.3_Cys_C == 1,"Trp2027.3_Cys_C",NA))
+metadata1 <- mutate(metadata1, Ile2041.2_Asn_A = ifelse(Ile2041.2_Asn_A == 1,"Ile2041.2_Asn_A",NA))
+metadata1 <- mutate(metadata1, Asp2078.2_Gly_G = ifelse(Asp2078.2_Gly_G == 1,"Asp2078.2_Gly_G",NA))
+metadata1 <- mutate(metadata1, Gly2096.2_Ala_C = ifelse(Gly2096.2_Ala_C == 1,"Gly2096.2_Ala_C",NA))
+
+metadata1 <- mutate(metadata1, wildtype = ifelse(wildtype == 1,"wildtype",NA))
+
+metadata1
+metadata1$population <- sapply(strsplit(as.character(IDs), "[_]"), "[", 1)
+metadata1$Reads <- as.numeric(paste(metadata1$Reads))
+metadata1$haplotype_proportion <- metadata1$Reads / 5300
+metadata1
+```
+
+```{r}
+library(tidyr)
+
+metadata2 <- unite(metadata1, TSR, Ile1781.1_Leu_T, Ile1781.1_Leu_C, Ile1781.1_Val_G, Ile1781.2_Thr_C, Trp1999.2_Leu_T,Trp1999.2_Ser_C,Trp2027.2_Leu_T, Trp2027.3_Cys_T, Trp2027.3_Cys_C, Ile2041.2_Asn_A, Asp2078.2_Gly_G,Gly2096.2_Ala_C, wildtype , sep = "_", remove = FALSE, na.rm = TRUE)
+metadata2
+
+unique(metadata2$TSR)
+metadata2
+```
+
+
+Load metadata
+```{r}
+library(readxl)
+Metadata_Agris42_pops_hap <- read_excel("input_files_Rscripts/Metadata_Agris42_pops.xlsx")
+colnames(Metadata_Agris42_pops_hap)[1] <- "population"
+head(Metadata_Agris42_pops_hap)
+unique(Metadata_Agris42_pops_hap$treatement)
+AGRIS42_all_hap <- merge(metadata2,Metadata_Agris42_pops_hap, by="population")
+AGRIS42_all_hap$farmer <- sapply(strsplit(as.character(AGRIS42_all_hap$sample), "[_]"), "[", 2)
+AGRIS42_all_hap$joint_id <- paste(AGRIS42_all_hap$farmer, AGRIS42_all_hap$population, sep="_")
+AGRIS42_all_hap
+```
+
+```{r}
+library('ggplot2')
+AGRIS42_all_hap <-AGRIS42_all_hap[order(-AGRIS42_all_hap$haplotype_proportion),]
+
+myColors <- c("#bd0026", "#ff8080", "#800026", "#fd8d3c", "#006666", "#00b3b3", "#b30086", "#ff00ff","#f1b6da", "#002db3", "#e6b800", "#a31aff","#00b30099")
+names(myColors) <- as.factor(c("Ile1781.1_Leu_T", "Ile1781.1_Leu_C", "Ile1781.1_Val_G", "Ile1781.2_Thr_C", "Trp1999.2_Leu_T","Trp1999.2_Ser_C", "Trp2027.2_Leu_T" ,"Trp2027.3_Cys_T", "Trp2027.3_Cys_C", "Ile2041.2_Asn_A", "Asp2078.2_Gly_G", "Gly2096.2_Ala_C", "wildtype"))
+
+pdf(file="Haplotypes_Agris42_populations_Axial.pdf", width = 19, height = 5)
+
+p1_hap_freq <- ggplot(data=AGRIS42_all_hap, aes(x=joint_id, y=haplotype_proportion, fill=TSR)) + geom_bar(stat="identity",colour="#666666") + facet_grid(~AXIAL_BinScore, scales = "free_x", space="free") + theme_light() + theme(axis.text.x = element_text(angle =90, vjust=0.5, hjust = 0)) + scale_y_continuous(breaks = seq(0,1, by=0.1), limits=c(0,1), expand = c(0,0)) + scale_fill_manual(values=myColors) + ylab("Haplotype frequency") + ggtitle("Haplotype frequencies Agris42 populations - Axial phenotyping")+ theme(axis.title.x = element_blank()) + theme(text=element_text(size=20))+ theme(strip.text.x=element_text(size=23))
+
+p1_hap_freq
+
+dev.off()
+
+png("Haplotypes_Agris42_populations_Axial.png", width = 500, height = 130, units='mm', res = 300)
+p1_hap_freq
+dev.off()
+```
+
+
+```{r}
+unique(AGRIS42_all_hap$FOCUS_BinScore)
+AGRIS42_all_hap$FOCUS_BinScore = factor(AGRIS42_all_hap$FOCUS_BinScore, levels=c("0", "3", "4", "6","7","8", "9", "10", "NA"))
+
+pdf(file="Haplotypes_Agris42_populations_Focus.pdf", width = 19, height = 5)
+
+p2_hap_freq <- ggplot(data=AGRIS42_all_hap, aes(x=joint_id, y=haplotype_proportion, fill=TSR)) + geom_bar(stat="identity",colour="#666666") + facet_grid(~FOCUS_BinScore, scales = "free_x", space="free") + theme_light() + theme(axis.text.x = element_text(angle =90, vjust=0.5, hjust = 0)) + scale_y_continuous(breaks = seq(0,1, by=0.1), limits=c(0,1), expand = c(0,0)) + scale_fill_manual(values=myColors) + ylab("Haplotype frequency") + ggtitle("Allele frequencies Agris42 populations - Focus phenotyping")+ theme(axis.title.x = element_blank())  + theme(text=element_text(size=20))+ theme(strip.text.x=element_text(size=23))
+
+
+p2_hap_freq
+
+dev.off()
+
+png("Haplotypes_Agris42_populations_Focus.png", width = 500, height = 130, units='mm', res = 300)
+p2_hap_freq
+dev.off()
+```
+
+
+```{r}
+unique(AGRIS42_all_hap$treatement)
+AGRIS42_all_hap$treatement = factor(AGRIS42_all_hap$treatement, levels=c("ACCase", "PRE+ACCase", "ALS", "PRE+ALS","ACCase+ALS", "PRE", "Organic"))
+
+pdf(file="Haplotypes_Agris42_populations_treatments.pdf", width = 19, height = 5)
+
+p3_hap_freq <- ggplot(data=AGRIS42_all_hap, aes(x=joint_id, y=haplotype_proportion, fill=TSR)) + geom_bar(stat="identity",colour="#666666") + facet_grid(~treatement, scales = "free_x", space="free") + theme_light() + theme(axis.text.x = element_text(angle =90, vjust=0.5, hjust = 0)) + scale_y_continuous(breaks = seq(0,1, by=0.1), limits=c(0,1), expand = c(0,0)) + scale_fill_manual(values=myColors) + ylab("Haplotype frequency") + ggtitle("Haplotype frequencies Agris42 populations - Field treatments")+ theme(axis.title.x = element_blank()) + theme(text=element_text(size=20)) + theme(strip.text.x=element_text(size=10))
+
+p3_hap_freq
+
+dev.off()
+
+png("Haplotypes_Agris42_populations_treatments.png", width = 500, height = 130, units='mm', res = 300)
+p3_hap_freq
+dev.off()
+
+```
+
+```{r}
+myColors <- c("#bd0026", "#ff8080", "#800026", "#fd8d3c", "#006666", "#00b3b3", "#b30086", "#ff00ff","#f1b6da", "#002db3", "#e6b800", "#a31aff","#00b30099")
+names(myColors) <- as.factor(c("Ile1781.1_Leu_T", "Ile1781.1_Leu_C", "Ile1781.1_Val_G", "Ile1781.2_Thr_C", "Trp1999.2_Leu_T","Trp1999.2_Ser_C", "Trp2027.2_Leu_T" ,"Trp2027.3_Cys_T", "Trp2027.3_Cys_C", "Ile2041.2_Asn_A", "Asp2078.2_Gly_G", "Gly2096.2_Ala_C", "wildtype"))
+
+
+pdf(file="Haplotypes_Agris42_populations_location.pdf", width = 19, height = 5)
+
+p4_hap_freq <- ggplot(data=AGRIS42_all_hap, aes(x=joint_id, y=haplotype_proportion, fill=TSR)) + geom_bar(stat="identity", colour="#666666") + facet_grid(~bundesland_abbr, scales = "free_x", space="free") + theme_light() + theme(axis.text.x = element_text(angle =90, vjust=0.5, hjust = 0)) + scale_y_continuous(breaks = seq(0,1, by=0.1), limits=c(0,1), expand = c(0,0)) + scale_fill_manual(values=myColors) + ylab("Haplotype frequency") + ggtitle("Haplotype frequencies Agris42 populations - Geographic location")+ theme(axis.title.x = element_blank()) + theme(text=element_text(size=20)) + theme(strip.text.x=element_text(size=23))
+
+p4_hap_freq
+
+dev.off()
+
+png("Haplotypes_Agris42_populations_location.png", width = 500, height = 130, units='mm', res = 300)
+p4_hap_freq
+dev.off()
+```
+
+#############
+## Correlations between haplotype frequencies and allele frequencies (ACC_classical_alignment_pools_Agris42)
+
+This code block relies on the object "AGRIS42_all2" generated by "Rscript_Figure3_classical_SNP_calling.Rmd"
+```{r}
+AGRIS42_all_hap
+
+AGRIS42_cluster_to_allele <-  aggregate(AGRIS42_all_hap$haplotype_proportion, by= list( AGRIS42_all_hap$TSR , AGRIS42_all_hap$population) , sum)
+head(AGRIS42_cluster_to_allele)
+
+colnames(AGRIS42_cluster_to_allele) <- c('TSR', 'populations', 'TSR_frequency' )
+AGRIS42_cluster_to_allele <- subset(AGRIS42_cluster_to_allele, TSR != 'wildtype' )
+AGRIS42_cluster_to_allele$pop_TSR <- paste(AGRIS42_cluster_to_allele$populations, AGRIS42_cluster_to_allele$TSR, sep = '-')
+
+# Bring on and manipulate classical allele freq
+AGRIS42_all2$pop_TSR <- paste(AGRIS42_all2$populations, AGRIS42_all2$TSR, sep = '-')
+AGRIS42_all2_filterNA <- AGRIS42_all2[ !is.na(AGRIS42_all2$value) , ]
+AGRIS42_all2_filterNA
+
+# Merge both data sets
+AGRIS42_a_vs_c <- merge(AGRIS42_all2_filterNA, AGRIS42_cluster_to_allele, by='pop_TSR', all=TRUE)
+AGRIS42_a_vs_c <- AGRIS42_a_vs_c[ ,-c(3:7) ]
+
+# Replace NA values with Zeros
+AGRIS42_a_vs_c$value <- unlist(lapply(AGRIS42_a_vs_c$value, function(x){if(is.na(x)){ x<-0 } else { x<-x } } ))
+AGRIS42_a_vs_c$TSR_frequency <- unlist(lapply(AGRIS42_a_vs_c$TSR_frequency, function(x){if(is.na(x)){ x<-0 } else { x<-x } } ))
+
+
+AGRIS42_a_vs_c$TSRs <- sapply(strsplit(as.character(AGRIS42_a_vs_c$pop_TSR), "[-.]"), "[", 2)
+AGRIS42_a_vs_c
+```
+
+```{r}
+# Correlation plot
+library(ggpubr)
+library(ggh4x)
+
+corrColors <- c("#bd0026", "#006666", "#b30086", "#002db3", "#e6b800", "#a31aff")
+names(corrColors) <- as.factor(c("Ile1781", "Trp1999", "Trp2027" , "Ile2041", "Asp2078", "Gly2096"))
+
+AGRIS42_a_vs_c$TSRs =factor(AGRIS42_a_vs_c$TSRs, levels=c("Ile1781", "Trp1999", "Trp2027" , "Ile2041", "Asp2078", "Gly2096"))
+
+p1_corr <- ggplot(AGRIS42_a_vs_c, aes(x=value, y=TSR_frequency, color=TSRs)) + facet_grid(~TSRs)+  
+  geom_point()+ geom_smooth(method=lm, se=FALSE)+ scale_colour_manual(values=corrColors) + ylab("Haplotype frequency") + xlab("Allele frequency") + theme_light() + theme(text=element_text(size=20)) + theme(strip.text.x=element_text(size=23)) + stat_cor(method = "pearson", label.y = 0.62, size=6)
+
+# Adjusted axes
+p1_corr_new <- ggplot(AGRIS42_a_vs_c, aes(x=value, y=TSR_frequency, color=TSRs)) +
+  ggh4x::facet_grid2(. ~ TSRs, scales = "free", independent = "y")+  
+  geom_point()+ geom_smooth(method=lm, se=FALSE)+ scale_colour_manual(values=corrColors) + ylab("Haplotype frequency") + xlab("Allele frequency") + theme_light() + theme(text=element_text(size=20)) + theme(strip.text.x=element_text(size=23)) + stat_cor(method = "pearson", label.y = c(0.62,0.059,0.275,0.102,0.18,0.53), size=6) + theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=0.5))
+p1_corr_new
+
+
+pdf(file="Correlation_Haplotypes_Allelefreqs_Agris42.pdf", width = 18, height = 3)
+p1_corr
+dev.off()
+
+png("Correlation_Haplotypes_Allelefreqs_Agris42.png", width = 440, height = 80, units='mm', res = 300)
+p1_corr
+dev.off()
+
+
+# Subset of low frequency TSR mutations (Trp1999, Ile2041, Asp2078)
+
+AGRIS42_a_vs_c_low_freq <- subset(AGRIS42_a_vs_c, TSRs=="Trp1999" | TSRs=="Ile2041" | TSRs=="Asp2078")
+AGRIS42_a_vs_c_low_freq
+
+corrColors_low_freq <- c("#006666", "#002db3", "#e6b800")
+names(corrColors_low_freq) <- as.factor(c("Trp1999", "Ile2041", "Asp2078"))
+
+AGRIS42_a_vs_c_low_freq$TSRs =factor(AGRIS42_a_vs_c_low_freq$TSRs, levels=c("Trp1999", "Ile2041", "Asp2078"))
+
+
+p1_corr_low_freq <- ggplot(AGRIS42_a_vs_c_low_freq, aes(x=value, y=TSR_frequency, color=TSRs)) +
+  ggh4x::facet_grid2(. ~ TSRs, scales = "free", independent = "y")+  
+  geom_point()+ geom_smooth(method=lm, se=FALSE)+ scale_colour_manual(values=corrColors_low_freq) + ylab("Haplotype frequency") + xlab("Allele frequency") + theme_light() + theme(text=element_text(size=20)) + theme(strip.text.x=element_text(size=23)) + stat_cor(method = "pearson", label.y = c(0.059,0.102,0.18), size=6)
+p1_corr_low_freq
+
+pdf(file="Correlation_Haplotypes_Allelefreqs_Agris42_free_axes_low_freq.pdf", width = 13, height = 4)
+p1_corr_low_freq
+dev.off()
+
+png("Correlation_Haplotypes_Allelefreqs_Agris42_free_axes_low_freq.png", width = 320, height = 100, units='mm', res = 300)
+p1_corr_low_freq
+dev.off()
+```
+
+```{r}
+cor.test(AGRIS42_a_vs_c$value, AGRIS42_a_vs_c$TSR_frequency)
+```
+
+```{r}
+summary(lm(AGRIS42_a_vs_c$TSR_frequency ~ AGRIS42_a_vs_c$value))
+```
+
+# Correlations phenotypes and haplotype frequencies - Axial and Focus
+```{r}
+AGRIS42_all_hap
+unique(AGRIS42_all_hap$TSR)
+
+AGRIS42_all_hap1 <- subset(AGRIS42_all_hap, TSR != 'wildtype' )
+AGRIS42_all_hap1
+
+
+AGRIS42_cluster_to_allele1 <-  aggregate(AGRIS42_all_hap1$haplotype_proportion, by= list(AGRIS42_all_hap1$population) , sum)
+AGRIS42_cluster_to_allele1
+
+colnames(AGRIS42_cluster_to_allele1) <- c('population', 'TSR_frequency' )
+
+Metadata_Agris42_pops_hap
+
+AGRIS42_all_hap2 <- merge(AGRIS42_cluster_to_allele1, Metadata_Agris42_pops_hap, by='population')
+AGRIS42_all_hap2
+
+#### Subset specific to Focus
+AGRIS42_all_hap3 <- subset(AGRIS42_all_hap, TSR == 'Ile1781.1_Leu_T' | TSR == 'Ile1781.1_Leu_C' | TSR == 'Asp2078.2_Gly_G')
+AGRIS42_all_hap3
+AGRIS42_cluster_to_allele3 <-  aggregate(AGRIS42_all_hap3$haplotype_proportion, by= list(AGRIS42_all_hap3$population) , sum)
+AGRIS42_cluster_to_allele3
+
+colnames(AGRIS42_cluster_to_allele3) <- c('population', 'TSR_frequency' )
+
+Metadata_Agris42_pops_hap
+
+AGRIS42_all_hap3 <- merge(AGRIS42_cluster_to_allele3, Metadata_Agris42_pops_hap, by='population')
+AGRIS42_all_hap3
+
+#### Subset specific to Axial
+AGRIS42_all_hap4 <- subset(AGRIS42_all_hap, TSR == 'Ile1781.1_Leu_T' | TSR == 'Ile1781.1_Leu_C' | TSR == 'Trp2027.3_Cys_T' | TSR == 'Trp2027.3_Cys_C' | TSR == 'Asp2078.2_Gly_G')
+AGRIS42_all_hap4
+AGRIS42_cluster_to_allele4 <-  aggregate(AGRIS42_all_hap4$haplotype_proportion, by= list(AGRIS42_all_hap4$population) , sum)
+AGRIS42_cluster_to_allele4
+
+colnames(AGRIS42_cluster_to_allele4) <- c('population', 'TSR_frequency' )
+
+Metadata_Agris42_pops_hap
+
+AGRIS42_all_hap4 <- merge(AGRIS42_cluster_to_allele4, Metadata_Agris42_pops_hap, by='population')
+AGRIS42_all_hap4
+
+```
+
+```{r}
+p2_corr <- ggplot(AGRIS42_all_hap2, aes(x=AXIAL_1200, y=TSR_frequency)) + geom_point(colour="#808080") + geom_smooth(method=lm, se=FALSE, colour="black") + ylab("TSR haplotype frequency") + xlab("Axial phenotype (0=resist., 100=sens.)") + theme_light() + stat_cor(method = "pearson", label.y = 0.80, size=6) + geom_smooth(data=AGRIS42_all_hap4,aes(x=AXIAL_1200, y=TSR_frequency),method=lm, se=FALSE, colour="#008080", linetype="dashed")+ stat_cor(data=AGRIS42_all_hap3,aes(x=AXIAL_1200, y=TSR_frequency),method = "pearson", label.y = 0.75, size=6, colour="#008080") + ylim(0,0.8)+ theme(text=element_text(size=22)) + theme(axis.title.x=element_text(size=16))+ theme(axis.title.y=element_text(size=16))
+p2_corr
+
+pdf(file="Correlation_Haplotypes_Axial_phenotyping_Agris42.pdf", width = 4.5, height = 4.5)
+p2_corr
+dev.off() 
+
+png("Correlation_Haplotypes_Axial_phenotyping_Agris42.png", width = 115, height = 115, units='mm', res = 300)
+p2_corr
+dev.off()
+
+```
+
+```{r}
+p3_corr <- ggplot(AGRIS42_all_hap2, aes(x=FOCUS_2500, y=TSR_frequency)) + geom_point(colour="#808080") + geom_smooth(method=lm, se=FALSE, colour="black") + ylab("TSR haplotype frequency") + xlab("Focus phenotype (0=resist., 100=sens.)") + theme_light() + stat_cor(method = "pearson", label.y = 0.80, size=6) + geom_smooth(data=AGRIS42_all_hap4,aes(x=FOCUS_2500, y=TSR_frequency),method=lm, se=FALSE, colour="#008080", linetype="dashed")+ stat_cor(data=AGRIS42_all_hap3,aes(x=FOCUS_2500, y=TSR_frequency),method = "pearson", label.y = 0.75, size=6, colour="#008080") + ylim(0,0.8)+ theme(text=element_text(size=22)) + theme(axis.title.x=element_text(size=15))+ theme(axis.title.y=element_text(size=16))
+p3_corr
+
+pdf(file="Correlation_Haplotypes_Focus_phenotyping_Agris42.pdf", width = 4.5, height = 4.5)
+p3_corr
+dev.off() 
+
+png("Correlation_Haplotypes_Focus_phenotyping_Agris42.png", width = 115, height = 115, units='mm', res = 300)
+p3_corr
+dev.off()
+```
+
+```{r}
+
+
+```
+
+
